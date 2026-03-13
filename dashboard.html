@@ -1888,7 +1888,7 @@ function renderDetail(s) {
         <span class="task-dot ${dotClass}"></span>
         <span class="task-icon-btn" title="수동완료 처리" onclick="event.stopPropagation();manualDone('${escAttr(s.name)}','${escAttr(t.title)}')">\u274c</span>
         <span class="task-name">${esc(t.title)}</span>
-        ${t.link ? `<a class="task-link-btn" href="${esc(t.link)}" target="_blank" onclick="event.stopPropagation();">폼 링크</a>` : ''}
+        ${t.format === '프린트' ? '<span class="task-tag" style="background:var(--bg-2)">🖨 프린트</span>' : (t.link ? `<a class="task-link-btn" href="${esc(t.link)}" target="_blank" onclick="event.stopPropagation();">폼 링크</a>` : '')}
         <span class="task-icon-btn" title="할일 삭제" style="color:var(--danger,#ef4444);margin-left:4px;" onclick="event.stopPropagation();deleteTask('${escAttr(t.title)}','${escAttr(s.school)}','${escAttr(s.grade)}')">🗑</span>
       </div>`;
     }
@@ -2059,13 +2059,12 @@ function showTaskMgmtModal(tab) {
   const assignments = (dashboardData && dashboardData.taskAssignments) || [];
 
   function assignLabel(a) {
-    if (a.students) return `👤 ${a.students}`;
-    if (!a.school)  return '🌐 전체';
-    // 숫자가 없으면 교과서명일 가능성
-    const hasKorean = /[가-힣]/.test(a.school);
+    const fmt = a.format === '프린트' ? ' · 🖨 프린트' : ' · 🔗 링크';
+    if (a.students) return `👤 ${a.students}${fmt}`;
+    if (!a.school)  return `🌐 전체${fmt}`;
     const looksLikeSchool = /고$/.test(a.school.trim());
-    if (hasKorean && !looksLikeSchool) return `📖 ${a.school}`;
-    return `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}`;
+    if (!looksLikeSchool) return `📖 ${a.school}${fmt}`;
+    return `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}${fmt}`;
   }
 
   const listRows = assignments.length === 0
@@ -2104,8 +2103,16 @@ function showTaskMgmtModal(tab) {
           <label>퀴즈 제목 <span style="color:var(--fail)">*</span></label>
           <input id="ta-title" type="text" placeholder="예: 문법-시제가정법 (구글폼 제목과 동일하게)">
 
-          <label>구글폼 링크 <span style="color:var(--fail)">*</span></label>
-          <input id="ta-link" type="url" placeholder="https://forms.gle/...">
+          <label>형태</label>
+          <div class="format-radios" style="gap:16px;margin-bottom:8px">
+            <label><input type="radio" name="ta-format" value="링크" checked onchange="onTaskFormatChange(this.value)"> 🔗 링크</label>
+            <label><input type="radio" name="ta-format" value="프린트" onchange="onTaskFormatChange(this.value)"> 🖨 프린트</label>
+          </div>
+
+          <div id="ta-link-field">
+            <label>구글폼 링크 <span style="color:var(--fail)">*</span></label>
+            <input id="ta-link" type="url" placeholder="https://forms.gle/...">
+          </div>
 
           <label>배정 기준</label>
           <div class="format-radios" style="gap:12px;margin-bottom:8px">
@@ -2165,6 +2172,10 @@ function onTaskTypeChange(type) {
   document.getElementById('ta-students-fields').style.display  = type === 'students' ? '' : 'none';
 }
 
+function onTaskFormatChange(fmt) {
+  document.getElementById('ta-link-field').style.display = fmt === '프린트' ? 'none' : '';
+}
+
 async function deleteTaskFromMgmt(idx) {
   const assignments = (dashboardData && dashboardData.taskAssignments) || [];
   const a = assignments[idx];
@@ -2181,14 +2192,15 @@ async function deleteTaskFromMgmt(idx) {
 }
 
 async function submitTaskAdd() {
-  const title = document.getElementById('ta-title').value.trim();
-  const link  = document.getElementById('ta-link').value.trim();
-  const type  = document.querySelector('input[name="ta-type"]:checked').value;
+  const title  = document.getElementById('ta-title').value.trim();
+  const format = document.querySelector('input[name="ta-format"]:checked').value;
+  const link   = format === '프린트' ? '' : document.getElementById('ta-link').value.trim();
+  const type   = document.querySelector('input[name="ta-type"]:checked').value;
 
   if (!title) { alert('퀴즈 제목을 입력해주세요.'); return; }
-  if (!link)  { alert('구글폼 링크를 입력해주세요.'); return; }
+  if (format === '링크' && !link) { alert('구글폼 링크를 입력해주세요.'); return; }
 
-  const payload = { action: '할일등록', title, link, assignType: type === 'all' ? 'school' : type };
+  const payload = { action: '할일등록', title, link, format, assignType: type === 'all' ? 'school' : type };
 
   if (type === 'school') {
     payload.school = document.getElementById('ta-school').value.trim();
