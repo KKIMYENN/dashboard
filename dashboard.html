@@ -1888,6 +1888,7 @@ function renderDetail(s) {
         <span class="task-icon-btn" title="수동완료 처리" onclick="event.stopPropagation();manualDone('${escAttr(s.name)}','${escAttr(t.title)}')">\u274c</span>
         <span class="task-name">${esc(t.title)}</span>
         ${t.link ? `<a class="task-link-btn" href="${esc(t.link)}" target="_blank" onclick="event.stopPropagation();">폼 링크</a>` : ''}
+        <span class="task-icon-btn" title="할일 삭제" style="color:var(--danger,#ef4444);margin-left:4px;" onclick="event.stopPropagation();deleteTask('${escAttr(t.title)}','${escAttr(s.school)}','${escAttr(s.grade)}')">🗑</span>
       </div>`;
     }
   }).join('');
@@ -2028,6 +2029,15 @@ async function manualDone(studentName, taskTitle) {
   const result = await postAction({ action: '수동완료', studentName, taskTitle });
   if (result && result.success) {
     showToast(`${studentName} - ${taskTitle}: 수동 완료`);
+    setTimeout(fetchData, 1000);
+  }
+}
+
+async function deleteTask(title, school, grade) {
+  if (!confirm(`"${title}" 할일을 배정 목록에서 삭제하시겠습니까?\n(이미 제출된 기록은 유지됩니다)`)) return;
+  const result = await postAction({ action: '할일삭제', title, school, grade });
+  if (result && result.success) {
+    showToast(`"${title}" 할일 삭제 완료`);
     setTimeout(fetchData, 1000);
   }
 }

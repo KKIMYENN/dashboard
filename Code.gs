@@ -96,6 +96,9 @@ function doPost(e) {
       case '주간과제조회':
         result = handleWeeklyTaskList();
         break;
+      case '할일삭제':
+        result = handleTaskDelete(params);
+        break;
       default:
         result = { error: '유효하지 않은 액션: ' + action };
     }
@@ -432,24 +435,32 @@ function getDashboardData(requestedPeriod) {
   var summaryRaw = summarySheet ? summarySheet.getDataRange().getValues() : [];
   // [타임스탬프, 이름, 퀴즈제목, 점수, 만점, 정답률, 기간명, 수정여부]
 
-  // --- 학교+학년 → 할일 목록 맵 + 개별 학생 할일 ---
+  // --- 교과서 역방향 맵: 교과서명 → ["학교_학년", ...] ---
+  var textbookReverseMap = {};
+  for (var tbKey in TEXTBOOK_MAP) {
+    if (TEXTBOOK_MAP.hasOwnProperty(tbKey)) {
+      var tbName = TEXTBOOK_MAP[tbKey];
+      if (!textbookReverseMap[tbName]) textbookReverseMap[tbName] = [];
+      textbookReverseMap[tbName].push(tbKey);
+    }
+  }
+
+  // --- 학교+학년/교과서 → 할일 목록 맵 + 개별 학생 할일 ---
   var taskMap = {};       // key: "학교_학년" → [{title, link}]
   var studentTaskMap = {}; // key: "학생이름" → [{title, link}]
 
   for (var i = 1; i < tasksRaw.length; i++) {
     var row = tasksRaw[i];
     var tSchool = String(row[0] != null ? row[0] : '').trim();
-    
+
     var rawTGrade = String(row[1] != null ? row[1] : '').trim();
     var tGrade = rawTGrade.replace(/[^0-9]/g, '');
-    // If the spreadsheet actually contained no numbers, fallback to original to avoid empty string
     if (!tGrade) tGrade = rawTGrade;
-    
+
     var tTitle = String(row[2] != null ? row[2] : '').trim();
     var tLink = String(row[3] != null ? row[3] : '').trim();
     var tTargets = String(row[5] != null ? row[5] : '').trim();
 
-    // B2 fix: 빈 퀴즈제목 건너뛰기
     if (!tTitle) continue;
 
     var taskObj = { title: tTitle, link: tLink || '' };
@@ -462,6 +473,13 @@ function getDashboardData(requestedPeriod) {
         if (!targetName) continue;
         if (!studentTaskMap[targetName]) studentTaskMap[targetName] = [];
         studentTaskMap[targetName].push(taskObj);
+      }
+    } else if (tSchool && textbookReverseMap[tSchool]) {
+      // A열이 교과서명인 경우 → 해당 교과서 쓰는 모든 학교_학년에 배정
+      var tbKeys = textbookReverseMap[tSchool];
+      for (var tk = 0; tk < tbKeys.length; tk++) {
+        if (!taskMap[tbKeys[tk]]) taskMap[tbKeys[tk]] = [];
+        taskMap[tbKeys[tk]].push(taskObj);
       }
     } else if (tSchool) {
       // 학교+학년 지정 → 해당 학생 전원
@@ -1481,6 +1499,31 @@ function handleWeeklyTaskSave(params) {
   sheet.appendRow([weekNum, label, schools, format, link, items]);
 
   return { success: true, action: '주간과제저장', weekNum: weekNum, label: label };
+}
+
+/** 할일배정 삭제 핸들러 */
+function handleTaskDelete(params) {
+  var tTitle = (params.title || '').trim();
+  var tSchool = (params.school || '').trim();
+  var tGrade = String(params.grade || '').trim();
+  if (!tTitle) return { error: 'title이 필요합니다.' };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_TASKS);
+  if (!sheet) return { error: '할일배정 시트를 찾을 수 없습니다.' };
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    var rowSchool = String(data[i][0] || '').trim();
+    var rowGrade  = String(data[i][1] || '').trim().replace(/[^0-9]/g, '');
+    var rowTitle  = String(data[i][2] || '').trim();
+    if (rowTitle !== tTitle) continue;
+    if (tSchool && rowSchool !== tSchool) continue;
+    if (tGrade && rowGrade !== tGrade) continue;
+    sheet.deleteRow(i + 1);
+    return { success: true, action: '할일삭제', title: tTitle };
+  }
+  return { error: '해당 할일을 찾을 수 없습니다: ' + tTitle };
 }
 
 /** 주간과제 삭제 핸들러 */
