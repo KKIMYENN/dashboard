@@ -342,6 +342,7 @@ body {
   border-radius: 4px;
   transition: background .15s;
   position: relative;
+  isolation: isolate;
   color: var(--text-1);
 }
 .cal-day.other-month {
@@ -349,10 +350,20 @@ body {
   opacity: .5;
 }
 .cal-day.today {
-  background: var(--accent) !important;
   color: #fff !important;
-  border-radius: 50%;
   font-weight: 700;
+}
+.cal-day.today::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  z-index: -1;
 }
 .cal-day.has-task::after {
   content: '';
