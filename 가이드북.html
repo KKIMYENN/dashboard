@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>확인학습 대시보드 — 사용자 가이드북</title>
+  <style>
+    :root {
+      --bg: #F8FAFC;
+      --card: #FFFFFF;
+      --text-1: #0F172A;
+      --text-2: #334155;
+      --text-3: #64748B;
+      --border: #E2E8F0;
+      --accent: #2563EB;
+      --accent-light: #EFF6FF;
+      --pass: #10B981;
+      --warn: #D97706;
+      --fail: #EF4444;
+      --radius: 12px;
+      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    }
+    body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg); color: var(--text-2); line-height: 1.6;
+    }
+    .container {
+      max-width: 800px; margin: 40px auto; padding: 0 20px;
+    }
+    .header {
+      text-align: center; margin-bottom: 40px; padding: 40px;
+      background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .header h1 {
+      margin: 0; color: var(--text-1); font-size: 28px; font-weight: 800; letter-spacing: -0.5px;
+    }
+    .header p {
+      margin: 10px 0 0; color: var(--text-3); font-size: 15px;
+    }
+    .section {
+      background: var(--card); padding: 32px; border-radius: var(--radius);
+      box-shadow: var(--shadow); margin-bottom: 24px;
+    }
+    .section-title {
+      font-size: 20px; font-weight: 700; color: var(--text-1);
+      margin-top: 0; margin-bottom: 20px; padding-bottom: 12px;
+      border-bottom: 2px solid var(--accent-light);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .step {
+      margin-bottom: 24px;
+    }
+    .step h3 {
+      font-size: 16px; color: var(--text-1); margin: 0 0 8px; font-weight: 600;
+    }
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    li { margin-bottom: 8px; }
+    .alert {
+      background: #FFFBEB; border-left: 4px solid var(--warn); color: #B45309;
+      padding: 12px 16px; border-radius: 4px; font-size: 14px; margin-bottom: 16px;
+    }
+    .alert.info {
+      background: var(--accent-light); border-left-color: var(--accent); color: #1E3A8A;
+    }
+    table {
+      width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border); padding: 10px 12px; text-align: left;
+    }
+    th { background: #F1F5F9; color: var(--text-1); font-weight: 600; }
+    code {
+      background: #F1F5F9; padding: 2px 6px; border-radius: 4px; font-size: 13px; color: #DB2777;
+    }
+    .footer {
+      text-align: center; color: var(--text-3); font-size: 13px; padding: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚀 실시간 확인학습 대시보드 가이드북</h1>
+      <p>선생님과 학생을 위한 실시간 퀴즈 및 과제 관리 시스템 완벽 설정 가이드</p>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">📂 전체 시스템 구조</h2>
+      <p>대시보드는 크게 세 가지 요소로 맞물려 돌아갑니다.</p>
+      <ol>
+        <li><b>학생 환경:</b> 스마트폰이나 PC로 구글 폼에 접속해 퀴즈를 제출합니다.</li>
+        <li><b>마스터 스프레드시트 (서버):</b> 학생들의 응답과 점수가 자동으로 집계되며 백그라운드 코드가 처리합니다.</li>
+        <li><b>대시보드 HTML (프론트엔드):</b> 선생님이 띄워놓는 화면으로, 5초마다 마스터 시트와 통신하여 결과를 갱신합니다.</li>
+      </ol>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">✨ 단계별 초기 셋업 가이드</h2>
+      
+      <div class="step">
+        <h3>1단계. 마스터 스프레드시트 생성</h3>
+        <ul>
+          <li>구글 드라이브에서 <b>새 Google 스프레드시트</b>를 만듭니다. (이름: <code>★확인학습 마스터</code> 등)</li>
+          <li>상단 메뉴에서 <b>확장 프로그램 ➔ Apps Script</b>를 엽니다.</li>
+          <li>미리 제공된 <code>Code.gs</code> 소스코드를 전체 복사하여 붙여넣고 저장(Ctrl+S)합니다.</li>
+          <li>스프레드시트로 돌아오면 상단에 새로 생긴 <b>📊 대시보드 ➔ 시트 초기 설정</b> 메뉴를 누릅니다. (권한 승인 필요)</li>
+          <li><code>학생명단</code>, <code>할일배정</code>, <code>Summary</code> 시트가 자동으로 생성됩니다.</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>2단계. 구글 폼 만들기 및 연결</h3>
+        <div class="alert">
+          <b>⚠️ 가장 중요합니다! 구글 폼 작성 규칙</b><br>
+          1. 폼 설정에서 반드시 <b>'퀴즈로 만들기'</b>를 켜주세요. (주관식 단답형/객관식 정답 세팅 필수)<br>
+          2. 첫 번째 문항은 무조건 <b>'이름' (단답형, 필수 응답, 0점)</b>이어야 합니다. 학생이 타자로 직접 입력해야 매칭됩니다.
+        </div>
+        <ul>
+          <li>구글 폼 편집기 화면 중앙 <b>'응답'</b> 탭을 누릅니다.</li>
+          <li>스프레드시트 아이콘(초록색 십자가)을 클릭하고 <b>'기존 스프레드시트 선택'</b>을 고릅니다.</li>
+          <li>방금 만든 <b>'확인학습 마스터'</b> 파일을 검색해 연결합니다.</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>3단계. 앱 배포(URL 만들기) 및 트리거 등록</h3>
+        <ul>
+          <li>다시 스프레드시트의 <b>📊 대시보드 ➔ 트리거 등록</b> 메뉴를 클릭합니다. (학생이 폼을 낼 때마다 자동 점수 처리가 되게 하는 엔진입니다.)</li>
+          <li><b>Apps Script</b> 창 상단 <b>'배포' ➔ '새 배포'</b>를 누릅니다.</li>
+          <li>유형: <b>웹 앱</b> / 실행 주체: <b>나(me)</b> / 액세스 권한: <b>모든 사용자(Anyone)</b>로 한 뒤 <b>배포</b>합니다.</li>
+          <li>발급된 <b>웹 앱 URL (https://script.google.com/macros/s/.../exec)</b>을 복사해 둡니다.</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>4단계. 대시보드 HTML 연동</h3>
+        <ul>
+          <li>컴퓨터에 바탕화면에 있는 <code>dashboard.html</code> 파일을 인터넷 브라우저로 더블클릭해 엽니다.</li>
+          <li>최초 실행 시 나타나는 "웹 앱 URL 연결" 창에, 3단계에서 복사해둔 <b>웹 앱 URL</b>을 붙여넣고 저장합니다.</li>
+          <li>연결 성공 메시지가 뜨며 대시보드가 구동되기 시작합니다!</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">📆 매일의 업무 메뉴얼 (일상 운영)</h2>
+      
+      <div class="step">
+        <h3>시트 1: "학생명단" 탭 기록하기</h3>
+        <p>새로 들어온 학생들이 생길 때마다 명단을 채워주세요.</p>
+        <table>
+          <tr><th>A열 (이름)</th><th>B열 (학교)</th><th>C열 (학년)</th><th>D열 (상태)</th></tr>
+          <tr><td>김민수</td><td>유성고</td><td>1</td><td>출석 / 지각 / 결석 / 귀가</td></tr>
+        </table>
+        <ul>
+          <li><b>상태(D열)</b>: 매일 등원 시 기본적으로 "출석"이나 "지각"으로 둡니다.</li>
+          <li>이 상태는 HTML 대시보드 화면상에서도 학생 카드의 버튼으로 언제든지 쉽게 클릭 한 번으로 바꿀 수 있습니다!</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>시트 2: "할일배정" 탭에 퀴즈 나눠주기</h3>
+        <p>오늘 어떤 학년/학교가 어떤 시험을 치를지 적어둡니다.</p>
+        <table>
+          <tr><th>A (학교)</th><th>C (퀴즈제목)</th><th>D (폼링크)</th><th>F (대상학생)</th></tr>
+          <tr><td>유성고 (1학년)</td><td>독해-모의3차</td><td>https://forms...</td><td>비움 (전체)</td></tr>
+          <tr><td>비움</td><td>재시-영단어</td><td>https://forms...</td><td>이하은, 박지호</td></tr>
+        </table>
+        <div class="alert info">
+          <b>💡 팁: 퀴즈 제목(C열)은 구글 폼 제목과 똑같아야 합니다!</b><br>
+          특정 학생(F열)에게만 콤마(,) 단위로 분리해서 퀴즈를 지정해줄 수도 있습니다. (예: 보충학습용)
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2 class="section-title">🛠 자주 묻는 질문 & 트러블슈팅</h2>
+      
+      <div class="step">
+        <h3>Q. 학생이 폼을 제출했는데 대시보드에 안 떠요!</h3>
+        <ul>
+          <li>상단에 노란색 <b>"이름 미매칭 경고"</b>가 뜬 게 아닌지 확인하세요. 학생이 이름을 오타 냈다면(예: '김민수' 대신 '김민슈') 시스템이 짝지어 주지 못해 오류함에 보관됩니다. (Summary 시트에서 오타 이름을 직접 수정해주세요.)</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>Q. 시트에 학생을 추가했는데 대시보드에 안 보입니다.</h3>
+        <ul>
+          <li>과부하를 막기 위해 데이터는 <b>5분</b> 정도 기억(캐싱)됩니다. 바로 보시려면 마스터 시트에서 메뉴 <b>📊 대시보드 ➔ 캐시 초기화</b>를 누르고 대시보드를 새로고침(F5) 해주세요.</li>
+        </ul>
+      </div>
+
+      <div class="step">
+        <h3>Q. 학생이 시험을 망쳐서 재시험을 봐야 해요.</h3>
+        <ul>
+          <li>그냥 구글 폼 링크를 주시고 <b>다시 제출</b>하라고 하시면 됩니다. 시스템이 똑똑하게 가장 최신에 제출한 최고차수 점수로 대시보드 점수를 덮어씌워 줍니다! ('2차 90%' 식으로 표기됩니다.)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer">
+      ⓒ 2026 확인학습 대시보드 시스템. Designed for Teachers' Productivity ☀️
+    </div>
+  </div>
+</body>
+</html>

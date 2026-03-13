@@ -1,0 +1,5 @@
+**/*.txt
+**/.clasp.json
+**/.claspignore
+**/셋업가이드.md
+**/~$*
