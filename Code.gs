@@ -812,9 +812,9 @@ function getDashboardData(requestedPeriod) {
     activePeriod: activePeriod,
     schools: Object.keys(schoolsSet).sort(),
     grades: Object.keys(gradesSet).sort(),
-    weeklyTasks: getWeeklyDisplayData(ss),
     taskAssignments: (function() {
       var rows = [];
+      // (1) 할일배정 시트
       for (var ti = 1; ti < tasksRaw.length; ti++) {
         var row = tasksRaw[ti];
         var school   = String(row[0] || '').trim();
@@ -832,6 +832,24 @@ function getDashboardData(requestedPeriod) {
           weekNum: isNaN(weekNum) ? null : weekNum,
           items: items
         });
+      }
+      // (2) 구 주간과제 시트 (backward compat)
+      var oldSheet = ss.getSheetByName(SHEET_WEEKLY);
+      if (oldSheet) {
+        var oldData = oldSheet.getDataRange().getValues();
+        for (var oi = 1; oi < oldData.length; oi++) {
+          var wn = parseInt(String(oldData[oi][0] || ''), 10);
+          if (isNaN(wn)) continue;
+          var lbl = String(oldData[oi][1] || '').trim();
+          if (!lbl) continue;
+          rows.push({
+            school: String(oldData[oi][2] || '').trim(),
+            grade: '', title: lbl,
+            link: String(oldData[oi][4] || '').trim(),
+            students: '', format: String(oldData[oi][3] || '프린트').trim(),
+            weekNum: wn, items: String(oldData[oi][5] || '').trim()
+          });
+        }
       }
       return rows;
     })()
@@ -1485,66 +1503,6 @@ function getOrCreateWeeklySheet(ss) {
     sheet.setFrozenRows(1);
   }
   return sheet;
-}
-
-/**
- * 캘린더 표시용: SHEET_TASKS에서 weekNum 있는 모든 행 + 구 SHEET_WEEKLY
- * → { weekNum: [{label, schools[], format, link, items[]}] }
- */
-function getWeeklyDisplayData(ss) {
-  var result = {};
-
-  // (1) 구 주간과제 시트 (backward compat)
-  var oldSheet = ss.getSheetByName(SHEET_WEEKLY);
-  if (oldSheet) {
-    var oldData = oldSheet.getDataRange().getValues();
-    for (var i = 1; i < oldData.length; i++) {
-      var weekNum = parseInt(oldData[i][0], 10);
-      if (isNaN(weekNum)) continue;
-      var label = String(oldData[i][1] || '').trim();
-      if (!label) continue;
-      var schoolsStr = String(oldData[i][2] || '').trim();
-      var schools = (!schoolsStr || schoolsStr === '전체')
-        ? ['전체']
-        : schoolsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-      var format  = String(oldData[i][3] || '').trim() || '프린트';
-      var link    = String(oldData[i][4] || '').trim();
-      var itemsStr = String(oldData[i][5] || '').trim();
-      var items   = itemsStr ? itemsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
-      if (!result[weekNum]) result[weekNum] = [];
-      result[weekNum].push({ label: label, schools: schools, format: format, link: link, items: items });
-    }
-  }
-
-  // (2) 할일배정 시트에서 weekNum 있는 모든 행 (단일학교 포함)
-  var newSheet = ss.getSheetByName(SHEET_TASKS);
-  if (newSheet) {
-    var newData = newSheet.getDataRange().getValues();
-    for (var j = 1; j < newData.length; j++) {
-      var wn = parseInt(String(newData[j][7] || ''), 10);
-      if (isNaN(wn) || wn <= 0) continue;
-      var label2 = String(newData[j][2] || '').trim();
-      if (!label2) continue;
-      var schoolRaw = String(newData[j][0] || '').trim();
-      var grade2    = String(newData[j][1] || '').trim().replace(/[^0-9]/g, '');
-      var schools2;
-      if (!schoolRaw) {
-        schools2 = ['전체'];
-      } else if (schoolRaw.indexOf(',') !== -1) {
-        schools2 = schoolRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-      } else {
-        schools2 = [schoolRaw + (grade2 ? ' ' + grade2 + '학년' : '')];
-      }
-      var format2   = String(newData[j][6] || '').trim() || '프린트';
-      var link2     = String(newData[j][3] || '').trim();
-      var itemsStr2 = String(newData[j][8] || '').trim();
-      var items2    = itemsStr2 ? itemsStr2.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
-      if (!result[wn]) result[wn] = [];
-      result[wn].push({ label: label2, schools: schools2, format: format2, link: link2, items: items2 });
-    }
-  }
-
-  return result;
 }
 
 /**
