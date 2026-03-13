@@ -348,7 +348,13 @@ body {
   color: var(--text-3);
   opacity: .5;
 }
-.cal-day.today::after {
+.cal-day.today {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-radius: 50%;
+  font-weight: 700;
+}
+.cal-day.has-task::after {
   content: '';
   position: absolute;
   bottom: 2px;
@@ -357,7 +363,7 @@ body {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--warn);
 }
 .wt-date-badge {
   font-size: 11px;
