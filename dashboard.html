@@ -359,6 +359,25 @@ body {
   border-radius: 50%;
   background: var(--accent);
 }
+.cal-day.has-task::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.wt-date-badge {
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
+}
 .cal-week-label {
   font-size: 11px;
   color: var(--text-3);
@@ -1276,7 +1295,7 @@ function computeWeeklySchoolTasks(assignments) {
     else if (a.school.includes(',')) schools = a.school.split(',').map(s => s.trim());
     else schools = [a.school + (a.grade ? ' ' + a.grade + '학년' : '')];
     const items = a.items ? a.items.split(',').map(s => s.trim()).filter(Boolean) : [];
-    result[a.weekNum].push({ label: a.title, schools, format: a.format || '프린트', link: a.link || '', items });
+    result[a.weekNum].push({ label: a.title, schools, format: a.format || '프린트', link: a.link || '', items, date: a.date || '' });
   });
   return result;
 }
@@ -1432,9 +1451,10 @@ function renderWeekTasksHtml(weekNum) {
     const badgeLabel = fmt === '링크' ? '🔗 링크' : '🖨 프린트';
     const labelHtml = (fmt === '링크' && g.link) ? `<a href="${g.link}" target="_blank">${g.label}</a>` : g.label;
     const safeLabel = g.label.replace(/'/g, "\\'");
+    const dateBadge = g.date ? `<span class="wt-date-badge">📅 ${g.date.slice(5).replace('-','/')}</span>` : '';
     html += `<div class="wt-group">`;
     html += `<span class="wt-del-btn" onclick="deleteWeeklyTask(${weekNum},'${safeLabel}')" title="삭제">✕</span>`;
-    html += `<div class="wt-schools">${g.schools.join(', ')} <span class="wt-badge ${badgeCls}">${badgeLabel}</span></div>`;
+    html += `<div class="wt-schools">${g.schools.join(', ')} <span class="wt-badge ${badgeCls}">${badgeLabel}</span>${dateBadge}</div>`;
     html += `<div class="wt-label">${labelHtml}</div>`;
     if (g.items && g.items.length > 0) {
       html += `<div class="wt-items">`;
@@ -1489,6 +1509,12 @@ function renderCalendar() {
   dows.forEach(d => { html += `<span class="cal-dow">${d}</span>`; });
   html += `<span class="cal-dow-label"></span>`; // 주차 컬럼 헤더
 
+  // 날짜별 과제 여부 precompute
+  const taskDateSet = new Set();
+  Object.values(weeklySchoolTasks).forEach(tasks => {
+    tasks.forEach(t => { if (t.date) taskDateSet.add(t.date); });
+  });
+
   // Week rows
   let cursor = new Date(calStart);
   while (cursor <= calEnd) {
@@ -1505,7 +1531,11 @@ function renderCalendar() {
       day.setDate(day.getDate() + d);
       const isOtherMonth = day.getMonth() !== month;
       const isToday = day.getTime() === today.getTime();
-      const dayClass = (isOtherMonth ? 'other-month' : '') + (isToday ? ' today' : '');
+      const mm = String(day.getMonth()+1).padStart(2,'0');
+      const dd = String(day.getDate()).padStart(2,'0');
+      const dateStr = `${day.getFullYear()}-${mm}-${dd}`;
+      const hasTask = taskDateSet.has(dateStr);
+      const dayClass = [(isOtherMonth ? 'other-month' : ''), (isToday ? 'today' : ''), (hasTask ? 'has-task' : '')].filter(Boolean).join(' ');
       html += `<span class="cal-day ${dayClass}">${day.getDate()}</span>`;
     }
     // 주차 라벨
@@ -2063,8 +2093,16 @@ function showTaskMgmtModal(tab, preWeekNum) {
             <div style="display:flex;flex-wrap:wrap;gap:4px 12px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px">
               ${schoolCheckboxes}
             </div>
-            <label>주차 <span style="color:var(--fail)">*</span> <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시)</span></label>
-            <input id="ta-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;margin-bottom:8px">
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+              <div>
+                <label>주차 <span style="color:var(--fail)">*</span> <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시)</span></label>
+                <input id="ta-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;display:block">
+              </div>
+              <div>
+                <label>날짜 <span style="font-size:11px;color:var(--text-3)">(선택)</span></label>
+                <input id="ta-date" type="date" style="width:160px;display:block">
+              </div>
+            </div>
             <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
             <input id="ta-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
           </div>
@@ -2169,7 +2207,7 @@ async function submitTaskAdd() {
   if (!title) { alert('과제 제목을 입력해주세요.'); return; }
   if (format === '링크' && !link) { alert('구글폼 링크를 입력해주세요.'); return; }
 
-  let school = '', grade = '', textbook = '', students = '', weekNum = '', schools = '', items = '';
+  let school = '', grade = '', textbook = '', students = '', weekNum = '', schools = '', items = '', date = '';
 
   if (type === 'school') {
     school = document.getElementById('ta-school').value.trim();
@@ -2181,6 +2219,7 @@ async function submitTaskAdd() {
     const allSchools = getAvailableSchools();
     schools = checked.length === allSchools.length ? '' : checked.join(',');
     items   = document.getElementById('ta-items').value.trim();
+    date    = document.getElementById('ta-date').value;
   } else if (type === 'textbook') {
     textbook = document.getElementById('ta-textbook').value.trim();
     if (!textbook) { alert('교과서명을 입력해주세요.'); return; }
@@ -2200,7 +2239,7 @@ async function submitTaskAdd() {
     if (!dashboardData.taskAssignments) dashboardData.taskAssignments = [];
     dashboardData.taskAssignments.push({
       school: schoolStr, grade: grade || '', title, link, students,
-      format, weekNum: wn, items
+      format, weekNum: wn, items, date
     });
     weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
     renderAll();
@@ -2209,7 +2248,7 @@ async function submitTaskAdd() {
   }
 
   const result = await postAction({ action: '과제등록', title, link, format, assignType: type,
-    school, grade, textbook, students, weekNum, schools, items });
+    school, grade, textbook, students, weekNum, schools, items, date });
   if (result && result.success) {
     showToast(`"${title}" 등록 완료`);
     fetchData();
