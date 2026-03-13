@@ -38,7 +38,7 @@ function doGet(e) {
     var data = getDashboardData(requestedPeriod);
     return jsonResponse(data);
   } catch (err) {
-    return jsonResponse({ error: err.message, stack: err.stack });
+    return jsonResponse({ error: err.message });
   }
 }
 
@@ -253,9 +253,9 @@ function handleStatusChange(params) {
     return { error: 'studentName과 newStatus가 필요합니다.' };
   }
 
-  var validStatuses = ['출석', '결석', '귀가', '지각'];
+  var validStatuses = ['출석', '결석', '귀가', '지각', '추가문제'];
   if (validStatuses.indexOf(newStatus) === -1) {
-    return { error: '유효하지 않은 상태: ' + newStatus + ' (출석/결석/귀가/지각)' };
+    return { error: '유효하지 않은 상태: ' + newStatus + ' (출석/결석/귀가/지각/추가문제)' };
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -522,7 +522,8 @@ function getDashboardData(requestedPeriod) {
       total: sTotal,
       pct: sPct,
       edited: sEdited === '수정됨',
-      manual: sEdited === '수동'
+      manual: sEdited === '수동',
+      pending: sEdited === '점수대기'
     };
     var entryTime = ts instanceof Date ? ts.getTime() : new Date(ts).getTime();
 
@@ -634,6 +635,7 @@ function getDashboardData(requestedPeriod) {
           pct: lt.pct,
           edited: lt.edited || false,
           manual: lt.manual || false,
+          pending: lt.pending || false,
           attempts: subData.history.length,
           history: subData.history.map(function(h) {
             return {
@@ -642,7 +644,8 @@ function getDashboardData(requestedPeriod) {
               total: h.total,
               pct: h.pct,
               edited: h.edited,
-              manual: h.manual
+              manual: h.manual,
+              pending: h.pending || false
             };
           })
         });
@@ -722,6 +725,7 @@ function getDashboardData(requestedPeriod) {
     noTasks: 0,
     avgScore: 0,
     above90: 0,
+    below70: 0,
     absent: 0,
     dismissed: 0,
     late: 0
@@ -748,6 +752,7 @@ function getDashboardData(requestedPeriod) {
     if (st.doneCount > 0) {
       scoredStudents.push(st.avgPct);
       if (st.avgPct >= 90) stats.above90++;
+      if (st.avgPct < 70) stats.below70++;
     }
   }
 
@@ -1019,7 +1024,7 @@ function onFormSubmitHandler(e) {
       total,            // E: 만점
       pct,              // F: 정답률
       periodName,       // G: 기간명
-      ''                // H: 수정여부 (자동채점이므로 비움)
+      total === 0 ? '점수대기' : ''  // H: 수정여부 (점수 미확인 시 보정 대기)
     ]);
 
     // 캐시 무효화
@@ -1039,11 +1044,11 @@ function onFormSubmitHandler(e) {
 function registerAllTriggers() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 기존 onFormSubmit 트리거 모두 삭제
+  // 기존 트리거 모두 삭제 (onFormSubmit + fixMissingScores)
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'onFormSubmitHandler'
-        && triggers[i].getEventType() === ScriptApp.EventType.ON_FORM_SUBMIT) {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === 'onFormSubmitHandler' || fn === 'fixMissingScores') {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -1054,12 +1059,106 @@ function registerAllTriggers() {
     .onFormSubmit()
     .create();
 
-  Logger.log('트리거 등록 완료: onFormSubmitHandler (스프레드시트 레벨)');
-  SpreadsheetApp.getUi().alert(
-    '트리거가 등록되었습니다.\n' +
-    '이 스프레드시트에 연결된 모든 구글폼의 제출이\n' +
-    '자동으로 Summary에 기록됩니다.'
-  );
+  // 점수 보정 트리거 — 5분마다
+  ScriptApp.newTrigger('fixMissingScores')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+
+  Logger.log('트리거 등록 완료: onFormSubmitHandler + fixMissingScores');
+  try {
+    SpreadsheetApp.getUi().alert(
+      '트리거가 등록되었습니다.\n' +
+      '이 스프레드시트에 연결된 모든 구글폼의 제출이\n' +
+      '자동으로 Summary에 기록됩니다.\n' +
+      '(점수 미확인 건은 2분 이내 자동 보정)'
+    );
+  } catch (_) { /* 스크립트 에디터에서 실행 시 UI 없음 — 무시 */ }
+}
+
+// ============================================================
+// 5-1. fixMissingScores — 점수대기 행 자동 보정 (2분마다 실행)
+// ============================================================
+function fixMissingScores() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_SUMMARY);
+  if (!sheet) return;
+
+  var data = sheet.getDataRange().getValues();
+
+  // 할일배정에서 퀴즈제목 → 폼URL 맵 구성
+  var formMap = {};
+  var tasksSheet = ss.getSheetByName(SHEET_TASKS);
+  if (tasksSheet) {
+    var tasksData = tasksSheet.getDataRange().getValues();
+    for (var i = 1; i < tasksData.length; i++) {
+      var title = String(tasksData[i][2] || '').trim();
+      var link  = String(tasksData[i][3] || '').trim();
+      if (title && link && !formMap[title]) formMap[title] = link;
+    }
+  }
+
+  var fixed = 0;
+  for (var r = data.length - 1; r >= 1; r--) {
+    if (String(data[r][7] || '').trim() !== '점수대기') continue;
+
+    var studentName = String(data[r][1] || '').trim();
+    var quizTitle   = String(data[r][2] || '').trim();
+    var formUrl     = formMap[quizTitle];
+    if (!formUrl) continue;
+
+    try {
+      var form = FormApp.openByUrl(formUrl);
+      if (!form.isQuiz()) continue;
+
+      var responses = form.getResponses();
+      for (var ri = responses.length - 1; ri >= 0; ri--) {
+        var resp = responses[ri];
+        // 응답에서 이름 확인
+        var items = resp.getItemResponses();
+        var respName = '';
+        for (var ii = 0; ii < items.length; ii++) {
+          var itemTitle = items[ii].getItem().getTitle().toLowerCase().trim();
+          if (itemTitle === '이름' || itemTitle === 'name' || itemTitle === '성명') {
+            respName = String(items[ii].getResponse()).trim();
+            break;
+          }
+        }
+        if (respName !== studentName) continue;
+
+        // 점수 계산
+        var gradable = resp.getGradableItemResponses();
+        var calcScore = 0, calcTotal = 0;
+        for (var gi = 0; gi < gradable.length; gi++) {
+          calcScore += gradable[gi].getScore();
+          try {
+            var origItem = gradable[gi].getItem();
+            var iType = origItem.getType();
+            if      (iType === FormApp.ItemType.MULTIPLE_CHOICE) calcTotal += origItem.asMultipleChoiceItem().getPoints();
+            else if (iType === FormApp.ItemType.CHECKBOX)        calcTotal += origItem.asCheckboxItem().getPoints();
+            else if (iType === FormApp.ItemType.LIST)            calcTotal += origItem.asListItem().getPoints();
+            else if (iType === FormApp.ItemType.TEXT)            calcTotal += origItem.asTextItem().getPoints();
+          } catch (_) {}
+        }
+
+        if (calcTotal > 0) {
+          var newPct = Math.round(calcScore / calcTotal * 100);
+          sheet.getRange(r + 1, 4).setValue(calcScore);
+          sheet.getRange(r + 1, 5).setValue(calcTotal);
+          sheet.getRange(r + 1, 6).setValue(newPct);
+          sheet.getRange(r + 1, 8).setValue('');
+          fixed++;
+          Logger.log('점수 보정: ' + studentName + ' / ' + quizTitle + ' = ' + calcScore + '/' + calcTotal);
+          break;
+        }
+      }
+    } catch (e) {
+      Logger.log('fixMissingScores 오류: ' + quizTitle + ' — ' + e.message);
+    }
+  }
+
+  if (fixed > 0) invalidateCache();
+  Logger.log('fixMissingScores 완료: ' + fixed + '개 보정');
 }
 
 // ============================================================
@@ -1299,12 +1398,16 @@ function invalidateCache() {
   
   removeChunks(CACHE_KEY);
   
-  // 기간별 캐시 제거
+  // 모든 기간 캐시 제거
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var periodName = getActivePeriodName(ss);
-    if (periodName) {
-      removeChunks(CACHE_KEY + '_' + periodName);
+    var sheet = ss.getSheetByName(SHEET_PERIODS);
+    if (sheet) {
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var name = String(data[i][0] || '').trim();
+        if (name) removeChunks(CACHE_KEY + '_' + name);
+      }
     }
   } catch (_) { /* 무시 */ }
 }
