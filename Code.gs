@@ -99,6 +99,9 @@ function doPost(e) {
       case '할일삭제':
         result = handleTaskDelete(params);
         break;
+      case '할일등록':
+        result = handleTaskAdd(params);
+        break;
       default:
         result = { error: '유효하지 않은 액션: ' + action };
     }
@@ -1524,6 +1527,44 @@ function handleTaskDelete(params) {
     return { success: true, action: '할일삭제', title: tTitle };
   }
   return { error: '해당 할일을 찾을 수 없습니다: ' + tTitle };
+}
+
+/** 할일 등록 핸들러 */
+function handleTaskAdd(params) {
+  var tTitle    = (params.title    || '').trim();
+  var tLink     = (params.link     || '').trim();
+  var assignType = (params.assignType || 'school').trim(); // 'school' | 'textbook' | 'students'
+
+  if (!tTitle) return { error: 'title이 필요합니다.' };
+  if (!tLink)  return { error: 'link가 필요합니다.' };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_TASKS);
+  if (!sheet) return { error: '할일배정 시트를 찾을 수 없습니다.' };
+
+  if (assignType === 'school') {
+    // A: 학교(또는 교과서), B: 학년, C: 퀴즈제목, D: 폼링크
+    var tSchool = (params.school || '').trim();
+    var tGrade  = String(params.grade || '').trim().replace(/[^0-9]/g, '');
+    sheet.appendRow([tSchool, tGrade, tTitle, tLink, '', '']);
+
+  } else if (assignType === 'textbook') {
+    // A열에 교과서명 — 기존 역방향 맵 로직으로 학교_학년 전체 배정
+    var tTextbook = (params.textbook || '').trim();
+    if (!tTextbook) return { error: 'textbook이 필요합니다.' };
+    sheet.appendRow([tTextbook, '', tTitle, tLink, '', '']);
+
+  } else if (assignType === 'students') {
+    // F열에 쉼표 구분 학생명
+    var tStudents = (params.students || '').trim();
+    if (!tStudents) return { error: 'students가 필요합니다.' };
+    sheet.appendRow(['', '', tTitle, tLink, '', tStudents]);
+
+  } else {
+    return { error: '알 수 없는 assignType: ' + assignType };
+  }
+
+  return { success: true, action: '할일등록', title: tTitle };
 }
 
 /** 주간과제 삭제 핸들러 */

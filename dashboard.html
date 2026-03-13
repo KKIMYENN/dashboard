@@ -888,6 +888,7 @@ select.filter-sel {
     </select>
     <input class="search-input" id="searchBox" type="text" placeholder="이름 검색..." oninput="renderStudents()">
     <button class="copy-btn" id="copyBtn" onclick="copyIncompleteLinks()">미완료 링크 복사</button>
+    <button class="copy-btn" id="addTaskBtn" onclick="showTaskAddModal()" style="background:var(--pass,#22c55e);color:#fff;border-color:transparent;">➕ 할일 등록</button>
   </div>
 
   <!-- Card Grid -->
@@ -2038,6 +2039,103 @@ async function deleteTask(title, school, grade) {
   const result = await postAction({ action: '할일삭제', title, school, grade });
   if (result && result.success) {
     showToast(`"${title}" 할일 삭제 완료`);
+    setTimeout(fetchData, 1000);
+  }
+}
+
+// ══════════════════════════════════════════
+//  할일 등록 모달
+// ══════════════════════════════════════════
+function showTaskAddModal() {
+  const schools = getAvailableSchools();
+  const allGrades = dashboardData ? (dashboardData.grades || []) : ['1','2','3'];
+  const container = document.getElementById('modalContainer');
+
+  const schoolOptions = schools.map(s => `<option value="${escAttr(s)}">${s}</option>`).join('');
+  const gradeOptions = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+
+  container.innerHTML = `
+    <div class="modal-overlay" onclick="closeModal(event)">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
+        <h3>➕ 할일 등록</h3>
+
+        <label>퀴즈 제목 <span style="color:var(--fail)">*</span></label>
+        <input id="ta-title" type="text" placeholder="예: 문법-시제가정법 (구글폼 제목과 동일하게)">
+
+        <label>구글폼 링크 <span style="color:var(--fail)">*</span></label>
+        <input id="ta-link" type="url" placeholder="https://forms.gle/...">
+
+        <label>배정 기준</label>
+        <div class="format-radios" style="gap:12px;margin-bottom:8px">
+          <label><input type="radio" name="ta-type" value="school" checked onchange="onTaskTypeChange(this.value)"> 학교+학년</label>
+          <label><input type="radio" name="ta-type" value="textbook" onchange="onTaskTypeChange(this.value)"> 교과서</label>
+          <label><input type="radio" name="ta-type" value="students" onchange="onTaskTypeChange(this.value)"> 개별학생</label>
+        </div>
+
+        <div id="ta-school-fields">
+          <label>학교</label>
+          <select id="ta-school" style="width:100%;margin-bottom:8px">
+            <option value="">-- 학교 선택 (비우면 전체) --</option>
+            ${schoolOptions}
+          </select>
+          <label>학년</label>
+          <select id="ta-grade" style="width:100%;margin-bottom:8px">
+            <option value="">-- 학년 선택 (비우면 전체) --</option>
+            ${gradeOptions}
+          </select>
+        </div>
+
+        <div id="ta-textbook-fields" style="display:none">
+          <label>교과서명</label>
+          <input id="ta-textbook" type="text" placeholder="예: 공통영어1 천재조">
+        </div>
+
+        <div id="ta-students-fields" style="display:none">
+          <label>대상 학생 <span style="font-size:11px;color:var(--text-3)">(쉼표로 구분)</span></label>
+          <input id="ta-students" type="text" placeholder="예: 김영희, 이철수">
+        </div>
+
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="document.getElementById('modalContainer').innerHTML=''">취소</button>
+          <button class="btn-confirm" onclick="submitTaskAdd()">등록</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function onTaskTypeChange(type) {
+  document.getElementById('ta-school-fields').style.display  = type === 'school'   ? '' : 'none';
+  document.getElementById('ta-textbook-fields').style.display = type === 'textbook' ? '' : 'none';
+  document.getElementById('ta-students-fields').style.display = type === 'students' ? '' : 'none';
+}
+
+async function submitTaskAdd() {
+  const title = document.getElementById('ta-title').value.trim();
+  const link  = document.getElementById('ta-link').value.trim();
+  const type  = document.querySelector('input[name="ta-type"]:checked').value;
+
+  if (!title) { alert('퀴즈 제목을 입력해주세요.'); return; }
+  if (!link)  { alert('구글폼 링크를 입력해주세요.'); return; }
+
+  const payload = { action: '할일등록', title, link, assignType: type };
+
+  if (type === 'school') {
+    payload.school = document.getElementById('ta-school').value.trim();
+    payload.grade  = document.getElementById('ta-grade').value.trim();
+  } else if (type === 'textbook') {
+    const tb = document.getElementById('ta-textbook').value.trim();
+    if (!tb) { alert('교과서명을 입력해주세요.'); return; }
+    payload.textbook = tb;
+  } else {
+    const st = document.getElementById('ta-students').value.trim();
+    if (!st) { alert('대상 학생을 입력해주세요.'); return; }
+    payload.students = st;
+  }
+
+  const result = await postAction(payload);
+  if (result && result.success) {
+    document.getElementById('modalContainer').innerHTML = '';
+    showToast(`"${title}" 할일 등록 완료`);
     setTimeout(fetchData, 1000);
   }
 }
