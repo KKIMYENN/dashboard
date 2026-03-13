@@ -888,7 +888,7 @@ select.filter-sel {
     </select>
     <input class="search-input" id="searchBox" type="text" placeholder="이름 검색..." oninput="renderStudents()">
     <button class="copy-btn" id="copyBtn" onclick="copyIncompleteLinks()">미완료 링크 복사</button>
-    <button class="copy-btn" id="addTaskBtn" onclick="showTaskMgmtModal('add')" style="background:var(--pass,#22c55e);color:#fff;border-color:transparent;">📋 할일 관리</button>
+    <button class="copy-btn" id="addTaskBtn" onclick="showTaskMgmtModal('add')" style="background:var(--pass,#22c55e);color:#fff;border-color:transparent;">📋 과제 관리</button>
   </div>
 
   <!-- Card Grid -->
@@ -1889,7 +1889,7 @@ function renderDetail(s) {
         <span class="task-icon-btn" title="수동완료 처리" onclick="event.stopPropagation();manualDone('${escAttr(s.name)}','${escAttr(t.title)}')">\u274c</span>
         <span class="task-name">${esc(t.title)}</span>
         ${t.format === '프린트' ? '<span class="task-tag" style="background:var(--bg-2)">🖨 프린트</span>' : (t.link ? `<a class="task-link-btn" href="${esc(t.link)}" target="_blank" onclick="event.stopPropagation();">폼 링크</a>` : '')}
-        <span class="task-icon-btn" title="할일 삭제" style="color:var(--danger,#ef4444);margin-left:4px;" onclick="event.stopPropagation();deleteTask('${escAttr(t.title)}','${escAttr(s.school)}','${escAttr(s.grade)}')">🗑</span>
+        <span class="task-icon-btn" title="과제 삭제" style="color:var(--danger,#ef4444);margin-left:4px;" onclick="event.stopPropagation();deleteTask('${escAttr(t.title)}','${escAttr(s.school)}','${escAttr(s.grade)}')">🗑</span>
       </div>`;
     }
   }).join('');
@@ -2035,16 +2035,16 @@ async function manualDone(studentName, taskTitle) {
 }
 
 async function deleteTask(title, school, grade) {
-  if (!confirm(`"${title}" 할일을 배정 목록에서 삭제하시겠습니까?\n(이미 제출된 기록은 유지됩니다)`)) return;
-  const result = await postAction({ action: '할일삭제', title, school, grade });
+  if (!confirm(`"${title}" 과제를 배정 목록에서 삭제하시겠습니까?\n(이미 제출된 기록은 유지됩니다)`)) return;
+  const result = await postAction({ action: '과제삭제', title, school, grade });
   if (result && result.success) {
-    showToast(`"${title}" 할일 삭제 완료`);
+    showToast(`"${title}" 과제 삭제 완료`);
     setTimeout(fetchData, 1000);
   }
 }
 
 // ══════════════════════════════════════════
-//  할일 관리 모달 (등록 / 목록·삭제)
+//  과제 관리 모달 (등록 / 목록·삭제)
 // ══════════════════════════════════════════
 function showTaskMgmtModal(tab) {
   tab = tab || 'add';
@@ -2068,7 +2068,7 @@ function showTaskMgmtModal(tab) {
   }
 
   const listRows = assignments.length === 0
-    ? '<p style="color:var(--text-3);text-align:center;padding:16px 0">등록된 할일이 없습니다</p>'
+    ? '<p style="color:var(--text-3);text-align:center;padding:16px 0">등록된 과제가 없습니다</p>'
     : assignments.map((a, i) => `
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="flex:1;min-width:0">
@@ -2082,7 +2082,7 @@ function showTaskMgmtModal(tab) {
   container.innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
       <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
-        <h3>📋 할일 관리</h3>
+        <h3>📋 과제 관리</h3>
 
         <!-- 탭 -->
         <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)">
@@ -2181,8 +2181,8 @@ async function deleteTaskFromMgmt(idx) {
   const a = assignments[idx];
   if (!a) return;
   const label = a.school ? ` (${a.school}${a.grade?' '+a.grade+'학년':''})` : a.students ? ` (${a.students})` : ' (전체)';
-  if (!confirm(`"${a.title}"${label} 할일을 삭제하시겠습니까?`)) return;
-  const result = await postAction({ action: '할일삭제', title: a.title, school: a.school || '', grade: a.grade || '' });
+  if (!confirm(`"${a.title}"${label} 과제를 삭제하시겠습니까?`)) return;
+  const result = await postAction({ action: '과제삭제', title: a.title, school: a.school || '', grade: a.grade || '' });
   if (result && result.success) {
     showToast(`"${a.title}" 삭제 완료`);
     await new Promise(r => setTimeout(r, 800));
@@ -2200,7 +2200,7 @@ async function submitTaskAdd() {
   if (!title) { alert('퀴즈 제목을 입력해주세요.'); return; }
   if (format === '링크' && !link) { alert('구글폼 링크를 입력해주세요.'); return; }
 
-  const payload = { action: '할일등록', title, link, format, assignType: type === 'all' ? 'school' : type };
+  const payload = { action: '과제등록', title, link, format, assignType: type === 'all' ? 'school' : type };
 
   if (type === 'school') {
     payload.school = document.getElementById('ta-school').value.trim();
@@ -2218,7 +2218,7 @@ async function submitTaskAdd() {
 
   const result = await postAction(payload);
   if (result && result.success) {
-    showToast(`"${title}" 할일 등록 완료`);
+    showToast(`"${title}" 과제 등록 완료`);
     await new Promise(r => setTimeout(r, 800));
     await fetchData();
     showTaskMgmtModal('list');

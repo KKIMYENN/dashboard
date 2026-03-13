@@ -96,10 +96,10 @@ function doPost(e) {
       case '주간과제조회':
         result = handleWeeklyTaskList();
         break;
-      case '할일삭제':
+      case '과제삭제':
         result = handleTaskDelete(params);
         break;
-      case '할일등록':
+      case '과제등록':
         result = handleTaskAdd(params);
         break;
       default:
@@ -1548,8 +1548,8 @@ function handleTaskDelete(params) {
     // school/grade 지정 시 첫 매칭만 삭제
     if (tSchool || tGrade) break;
   }
-  if (deleted === 0) return { error: '해당 할일을 찾을 수 없습니다: ' + tTitle };
-  return { success: true, action: '할일삭제', title: tTitle, deleted: deleted };
+  if (deleted === 0) return { error: '해당 과제를 찾을 수 없습니다: ' + tTitle };
+  return { success: true, action: '과제삭제', title: tTitle, deleted: deleted };
 }
 
 /** 할일 등록 핸들러 */
@@ -1585,7 +1585,7 @@ function handleTaskAdd(params) {
     return { error: '알 수 없는 assignType: ' + assignType };
   }
 
-  return { success: true, action: '할일등록', title: tTitle };
+  return { success: true, action: '과제등록', title: tTitle };
 }
 
 /** 주간과제 삭제 핸들러 */
