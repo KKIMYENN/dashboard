@@ -888,7 +888,7 @@ select.filter-sel {
     </select>
     <input class="search-input" id="searchBox" type="text" placeholder="이름 검색..." oninput="renderStudents()">
     <button class="copy-btn" id="copyBtn" onclick="copyIncompleteLinks()">미완료 링크 복사</button>
-    <button class="copy-btn" id="addTaskBtn" onclick="showTaskAddModal()" style="background:var(--pass,#22c55e);color:#fff;border-color:transparent;">➕ 할일 등록</button>
+    <button class="copy-btn" id="addTaskBtn" onclick="showTaskMgmtModal('add')" style="background:var(--pass,#22c55e);color:#fff;border-color:transparent;">📋 할일 관리</button>
   </div>
 
   <!-- Card Grid -->
@@ -2044,69 +2044,140 @@ async function deleteTask(title, school, grade) {
 }
 
 // ══════════════════════════════════════════
-//  할일 등록 모달
+//  할일 관리 모달 (등록 / 목록·삭제)
 // ══════════════════════════════════════════
-function showTaskAddModal() {
-  const schools = getAvailableSchools();
+function showTaskMgmtModal(tab) {
+  tab = tab || 'add';
+  const schools   = getAvailableSchools();
   const allGrades = dashboardData ? (dashboardData.grades || []) : ['1','2','3'];
   const container = document.getElementById('modalContainer');
 
   const schoolOptions = schools.map(s => `<option value="${escAttr(s)}">${s}</option>`).join('');
-  const gradeOptions = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+  const gradeOptions  = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+
+  // ── 목록 탭 내용 ──
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+
+  function assignLabel(a) {
+    if (a.students) return `👤 ${a.students}`;
+    if (!a.school)  return '🌐 전체';
+    // 숫자가 없으면 교과서명일 가능성
+    const hasKorean = /[가-힣]/.test(a.school);
+    const looksLikeSchool = /고$/.test(a.school.trim());
+    if (hasKorean && !looksLikeSchool) return `📖 ${a.school}`;
+    return `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}`;
+  }
+
+  const listRows = assignments.length === 0
+    ? '<p style="color:var(--text-3);text-align:center;padding:16px 0">등록된 할일이 없습니다</p>'
+    : assignments.map((a, i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(a.title)}">${esc(a.title)}</div>
+          <div style="font-size:11px;color:var(--text-3)">${assignLabel(a)}</div>
+        </div>
+        <button class="task-icon-btn" title="삭제" style="color:var(--danger,#ef4444);font-size:16px;flex-shrink:0"
+          onclick="deleteTaskFromMgmt(${i})">🗑</button>
+      </div>`).join('');
 
   container.innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
-        <h3>➕ 할일 등록</h3>
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+        <h3>📋 할일 관리</h3>
 
-        <label>퀴즈 제목 <span style="color:var(--fail)">*</span></label>
-        <input id="ta-title" type="text" placeholder="예: 문법-시제가정법 (구글폼 제목과 동일하게)">
-
-        <label>구글폼 링크 <span style="color:var(--fail)">*</span></label>
-        <input id="ta-link" type="url" placeholder="https://forms.gle/...">
-
-        <label>배정 기준</label>
-        <div class="format-radios" style="gap:12px;margin-bottom:8px">
-          <label><input type="radio" name="ta-type" value="school" checked onchange="onTaskTypeChange(this.value)"> 학교+학년</label>
-          <label><input type="radio" name="ta-type" value="textbook" onchange="onTaskTypeChange(this.value)"> 교과서</label>
-          <label><input type="radio" name="ta-type" value="students" onchange="onTaskTypeChange(this.value)"> 개별학생</label>
+        <!-- 탭 -->
+        <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)">
+          <button id="tm-tab-add"  onclick="switchTaskTab('add')"
+            style="flex:1;padding:8px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
+              ${tab==='add'  ? 'border-bottom:2px solid var(--accent);color:var(--accent);margin-bottom:-2px' : 'color:var(--text-3)'}">
+            ➕ 등록
+          </button>
+          <button id="tm-tab-list" onclick="switchTaskTab('list')"
+            style="flex:1;padding:8px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
+              ${tab==='list' ? 'border-bottom:2px solid var(--accent);color:var(--accent);margin-bottom:-2px' : 'color:var(--text-3)'}">
+            📄 목록 (${assignments.length})
+          </button>
         </div>
 
-        <div id="ta-school-fields">
-          <label>학교</label>
-          <select id="ta-school" style="width:100%;margin-bottom:8px">
-            <option value="">-- 학교 선택 (비우면 전체) --</option>
-            ${schoolOptions}
-          </select>
-          <label>학년</label>
-          <select id="ta-grade" style="width:100%;margin-bottom:8px">
-            <option value="">-- 학년 선택 (비우면 전체) --</option>
-            ${gradeOptions}
-          </select>
+        <!-- 등록 탭 -->
+        <div id="tm-pane-add" style="display:${tab==='add'?'':'none'}">
+          <label>퀴즈 제목 <span style="color:var(--fail)">*</span></label>
+          <input id="ta-title" type="text" placeholder="예: 문법-시제가정법 (구글폼 제목과 동일하게)">
+
+          <label>구글폼 링크 <span style="color:var(--fail)">*</span></label>
+          <input id="ta-link" type="url" placeholder="https://forms.gle/...">
+
+          <label>배정 기준</label>
+          <div class="format-radios" style="gap:12px;margin-bottom:8px">
+            <label><input type="radio" name="ta-type" value="school" checked onchange="onTaskTypeChange(this.value)"> 학교+학년</label>
+            <label><input type="radio" name="ta-type" value="textbook" onchange="onTaskTypeChange(this.value)"> 교과서</label>
+            <label><input type="radio" name="ta-type" value="all" onchange="onTaskTypeChange(this.value)"> 전체</label>
+            <label><input type="radio" name="ta-type" value="students" onchange="onTaskTypeChange(this.value)"> 개별학생</label>
+          </div>
+
+          <div id="ta-school-fields">
+            <label>학교</label>
+            <select id="ta-school" style="width:100%;margin-bottom:8px">
+              <option value="">-- 학교 선택 (비우면 전체) --</option>
+              ${schoolOptions}
+            </select>
+            <label>학년</label>
+            <select id="ta-grade" style="width:100%;margin-bottom:8px">
+              <option value="">-- 학년 선택 (비우면 전체) --</option>
+              ${gradeOptions}
+            </select>
+          </div>
+
+          <div id="ta-textbook-fields" style="display:none">
+            <label>교과서명</label>
+            <input id="ta-textbook" type="text" placeholder="예: 공통영어1 천재조">
+          </div>
+
+          <div id="ta-students-fields" style="display:none">
+            <label>대상 학생 <span style="font-size:11px;color:var(--text-3)">(쉼표로 구분)</span></label>
+            <input id="ta-students" type="text" placeholder="예: 김영희, 이철수">
+          </div>
+
+          <div class="modal-btns">
+            <button class="btn-cancel" onclick="document.getElementById('modalContainer').innerHTML=''">취소</button>
+            <button class="btn-confirm" onclick="submitTaskAdd()">등록</button>
+          </div>
         </div>
 
-        <div id="ta-textbook-fields" style="display:none">
-          <label>교과서명</label>
-          <input id="ta-textbook" type="text" placeholder="예: 공통영어1 천재조">
+        <!-- 목록 탭 -->
+        <div id="tm-pane-list" style="display:${tab==='list'?'':'none'};max-height:360px;overflow-y:auto">
+          ${listRows}
         </div>
-
-        <div id="ta-students-fields" style="display:none">
-          <label>대상 학생 <span style="font-size:11px;color:var(--text-3)">(쉼표로 구분)</span></label>
-          <input id="ta-students" type="text" placeholder="예: 김영희, 이철수">
-        </div>
-
-        <div class="modal-btns">
-          <button class="btn-cancel" onclick="document.getElementById('modalContainer').innerHTML=''">취소</button>
-          <button class="btn-confirm" onclick="submitTaskAdd()">등록</button>
-        </div>
+        ${tab==='list' ? `<div class="modal-btns" style="margin-top:12px">
+          <button class="btn-cancel" onclick="document.getElementById('modalContainer').innerHTML=''">닫기</button>
+        </div>` : ''}
       </div>
     </div>`;
 }
 
+function switchTaskTab(tab) {
+  showTaskMgmtModal(tab);
+}
+
 function onTaskTypeChange(type) {
-  document.getElementById('ta-school-fields').style.display  = type === 'school'   ? '' : 'none';
-  document.getElementById('ta-textbook-fields').style.display = type === 'textbook' ? '' : 'none';
-  document.getElementById('ta-students-fields').style.display = type === 'students' ? '' : 'none';
+  document.getElementById('ta-school-fields').style.display   = type === 'school'   ? '' : 'none';
+  document.getElementById('ta-textbook-fields').style.display  = type === 'textbook' ? '' : 'none';
+  document.getElementById('ta-students-fields').style.display  = type === 'students' ? '' : 'none';
+}
+
+async function deleteTaskFromMgmt(idx) {
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+  const a = assignments[idx];
+  if (!a) return;
+  const label = a.school ? ` (${a.school}${a.grade?' '+a.grade+'학년':''})` : a.students ? ` (${a.students})` : ' (전체)';
+  if (!confirm(`"${a.title}"${label} 할일을 삭제하시겠습니까?`)) return;
+  const result = await postAction({ action: '할일삭제', title: a.title, school: a.school || '', grade: a.grade || '' });
+  if (result && result.success) {
+    showToast(`"${a.title}" 삭제 완료`);
+    await new Promise(r => setTimeout(r, 800));
+    await fetchData();
+    showTaskMgmtModal('list');
+  }
 }
 
 async function submitTaskAdd() {
@@ -2117,7 +2188,7 @@ async function submitTaskAdd() {
   if (!title) { alert('퀴즈 제목을 입력해주세요.'); return; }
   if (!link)  { alert('구글폼 링크를 입력해주세요.'); return; }
 
-  const payload = { action: '할일등록', title, link, assignType: type };
+  const payload = { action: '할일등록', title, link, assignType: type === 'all' ? 'school' : type };
 
   if (type === 'school') {
     payload.school = document.getElementById('ta-school').value.trim();
@@ -2126,17 +2197,19 @@ async function submitTaskAdd() {
     const tb = document.getElementById('ta-textbook').value.trim();
     if (!tb) { alert('교과서명을 입력해주세요.'); return; }
     payload.textbook = tb;
-  } else {
+  } else if (type === 'students') {
     const st = document.getElementById('ta-students').value.trim();
     if (!st) { alert('대상 학생을 입력해주세요.'); return; }
     payload.students = st;
   }
+  // 'all' → school/grade 비워서 전체 배정
 
   const result = await postAction(payload);
   if (result && result.success) {
-    document.getElementById('modalContainer').innerHTML = '';
     showToast(`"${title}" 할일 등록 완료`);
-    setTimeout(fetchData, 1000);
+    await new Promise(r => setTimeout(r, 800));
+    await fetchData();
+    showTaskMgmtModal('list');
   }
 }
 

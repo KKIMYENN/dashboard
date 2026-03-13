@@ -795,7 +795,21 @@ function getDashboardData(requestedPeriod) {
     activePeriod: activePeriod,
     schools: Object.keys(schoolsSet).sort(),
     grades: Object.keys(gradesSet).sort(),
-    weeklyTasks: allWeeklyTasks
+    weeklyTasks: allWeeklyTasks,
+    taskAssignments: (function() {
+      var rows = [];
+      for (var ti = 1; ti < tasksRaw.length; ti++) {
+        var row = tasksRaw[ti];
+        var school   = String(row[0] || '').trim();
+        var grade    = String(row[1] || '').trim().replace(/[^0-9]/g, '');
+        var title    = String(row[2] || '').trim();
+        var link     = String(row[3] || '').trim();
+        var students = String(row[5] || '').trim();
+        if (!title) continue;
+        rows.push({ school: school, grade: grade, title: title, link: link, students: students });
+      }
+      return rows;
+    })()
   };
 
   // --- 캐시 저장 (Chunking) ---
@@ -1504,11 +1518,14 @@ function handleWeeklyTaskSave(params) {
   return { success: true, action: '주간과제저장', weekNum: weekNum, label: label };
 }
 
-/** 할일배정 삭제 핸들러 */
+/** 할일배정 삭제 핸들러
+ * school/grade 미지정 시 해당 title의 모든 행 삭제 (전체 삭제)
+ * school 또는 grade 지정 시 해당 행만 삭제 (특정 배정 삭제)
+ */
 function handleTaskDelete(params) {
-  var tTitle = (params.title || '').trim();
+  var tTitle  = (params.title  || '').trim();
   var tSchool = (params.school || '').trim();
-  var tGrade = String(params.grade || '').trim();
+  var tGrade  = String(params.grade || '').trim().replace(/[^0-9]/g, '');
   if (!tTitle) return { error: 'title이 필요합니다.' };
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1516,17 +1533,21 @@ function handleTaskDelete(params) {
   if (!sheet) return { error: '할일배정 시트를 찾을 수 없습니다.' };
 
   var data = sheet.getDataRange().getValues();
+  var deleted = 0;
   for (var i = data.length - 1; i >= 1; i--) {
     var rowSchool = String(data[i][0] || '').trim();
     var rowGrade  = String(data[i][1] || '').trim().replace(/[^0-9]/g, '');
     var rowTitle  = String(data[i][2] || '').trim();
     if (rowTitle !== tTitle) continue;
     if (tSchool && rowSchool !== tSchool) continue;
-    if (tGrade && rowGrade !== tGrade) continue;
+    if (tGrade  && rowGrade  !== tGrade)  continue;
     sheet.deleteRow(i + 1);
-    return { success: true, action: '할일삭제', title: tTitle };
+    deleted++;
+    // school/grade 지정 시 첫 매칭만 삭제
+    if (tSchool || tGrade) break;
   }
-  return { error: '해당 할일을 찾을 수 없습니다: ' + tTitle };
+  if (deleted === 0) return { error: '해당 할일을 찾을 수 없습니다: ' + tTitle };
+  return { success: true, action: '할일삭제', title: tTitle, deleted: deleted };
 }
 
 /** 할일 등록 핸들러 */
