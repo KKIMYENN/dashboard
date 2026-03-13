@@ -19,6 +19,9 @@ var SHEET_WEEKLY   = '주간과제';
 var CACHE_KEY      = 'dashboard_v8';
 var CACHE_TTL      = 300; // 5분 (초)
 
+// ---- 유틸리티 ----
+function safeStr(v) { return String(v != null ? v : '').trim(); }
+
 // ============================================================
 // 1. doGet — 대시보드 데이터 JSON 제공
 // ============================================================
@@ -264,7 +267,7 @@ function handleStatusChange(params) {
 
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    var name = String(data[i][0] != null ? data[i][0] : '').trim();
+    var name = safeStr(data[i][0]);
     if (name === studentName) {
       sheet.getRange(i + 1, 4).setValue(newStatus); // D열: 상태
       return { success: true, action: '상태변경', name: studentName, status: newStatus };
@@ -438,16 +441,16 @@ function getDashboardData(requestedPeriod) {
 
   for (var i = 1; i < tasksRaw.length; i++) {
     var row = tasksRaw[i];
-    var tSchool = String(row[0] != null ? row[0] : '').trim();
+    var tSchool = safeStr(row[0]);
     
-    var rawTGrade = String(row[1] != null ? row[1] : '').trim();
+    var rawTGrade = safeStr(row[1]);
     var tGrade = rawTGrade.replace(/[^0-9]/g, '');
     // If the spreadsheet actually contained no numbers, fallback to original to avoid empty string
     if (!tGrade) tGrade = rawTGrade;
     
-    var tTitle = String(row[2] != null ? row[2] : '').trim();
-    var tLink = String(row[3] != null ? row[3] : '').trim();
-    var tTargets = String(row[5] != null ? row[5] : '').trim();
+    var tTitle = safeStr(row[2]);
+    var tLink = safeStr(row[3]);
+    var tTargets = safeStr(row[5]);
 
     // B2 fix: 빈 퀴즈제목 건너뛰기
     if (!tTitle) continue;
@@ -481,7 +484,7 @@ function getDashboardData(requestedPeriod) {
   var validStudentNamesSet = {};
   for (var pi = 1; pi < studentsRaw.length; pi++) {
     var pRow = studentsRaw[pi];
-    var pName = String(pRow[0] != null ? pRow[0] : '').trim();
+    var pName = safeStr(pRow[0]);
     if (pName) validStudentNamesSet[pName] = true;
   }
 
@@ -493,14 +496,14 @@ function getDashboardData(requestedPeriod) {
   for (var si = 1; si < summaryRaw.length; si++) {
     var sRow = summaryRaw[si];
     var ts = sRow[0];
-    var sName = String(sRow[1] != null ? sRow[1] : '').trim();  // B1 fix
-    var sFormTitle = String(sRow[2] != null ? sRow[2] : '').trim();
+    var sName = safeStr(sRow[1]);  // B1 fix
+    var sFormTitle = safeStr(sRow[2]);
     var sScore = Number(sRow[3]) || 0;
     var sTotal = Number(sRow[4]) || 0;
     // B9 fix: total=0일 때 pct를 null로
     var sPct = sTotal > 0 ? (Number(sRow[5]) || Math.round(sScore / sTotal * 100)) : null;
-    var sPeriod = String(sRow[6] != null ? sRow[6] : '').trim();
-    var sEdited = String(sRow[7] != null ? sRow[7] : '').trim();
+    var sPeriod = safeStr(sRow[6]);
+    var sEdited = safeStr(sRow[7]);
 
     if (!sName || !sFormTitle) continue;
 
@@ -564,14 +567,14 @@ function getDashboardData(requestedPeriod) {
 
   for (var pi = 1; pi < studentsRaw.length; pi++) {
     var pRow = studentsRaw[pi];
-    var pName = String(pRow[0] != null ? pRow[0] : '').trim();  // B1 fix
-    var pSchool = String(pRow[1] != null ? pRow[1] : '').trim();
+    var pName = safeStr(pRow[0]);  // B1 fix
+    var pSchool = safeStr(pRow[1]);
     
-    var rawGrade = String(pRow[2] != null ? pRow[2] : '').trim();
+    var rawGrade = safeStr(pRow[2]);
     var pGrade = rawGrade.replace(/[^0-9]/g, '');
     if (!pGrade) pGrade = rawGrade;
     
-    var pStatus = String(pRow[3] != null ? pRow[3] : '').trim() || '출석';
+    var pStatus = safeStr(pRow[3]) || '출석';
     if (!pName) continue;
 
     // 학교/학년 목록 수집
@@ -824,7 +827,7 @@ function onFormSubmitHandler(e) {
     var total = 0;
 
     for (var c = 0; c < headers.length; c++) {
-      var h = String(headers[c] != null ? headers[c] : '').trim().toLowerCase();  // B10 fix: null 체크 + trim
+      var h = safeStr(headers[c]).toLowerCase();  // B10 fix: null 체크 + trim
 
       // 이름 컬럼
       if (h === '이름' || h === 'name' || h === '성명') {
@@ -851,7 +854,7 @@ function onFormSubmitHandler(e) {
     // 이름을 못 찾았으면 타임스탬프/점수 아닌 첫 번째 컬럼 시도
     if (!studentName) {
       for (var c2 = 0; c2 < headers.length; c2++) {
-        var h2 = String(headers[c2] != null ? headers[c2] : '').trim().toLowerCase();
+        var h2 = safeStr(headers[c2]).toLowerCase();
         if (h2 !== 'timestamp' && h2 !== '타임스탬프' && h2 !== '점수' && h2 !== 'score'
             && h2 !== '이메일' && h2 !== 'email address' && h2 !== '이메일 주소') {
           if (values[c2] != null) {
@@ -876,8 +879,8 @@ function onFormSubmitHandler(e) {
     var now = new Date();
     for (var di = summaryData.length - 1; di >= Math.max(1, summaryData.length - 10); di--) {
       var dRow = summaryData[di];
-      var dName = String(dRow[1] != null ? dRow[1] : '').trim();
-      var dTitle = String(dRow[2] != null ? dRow[2] : '').trim();
+      var dName = safeStr(dRow[1]);
+      var dTitle = safeStr(dRow[2]);
       var dTime = dRow[0] instanceof Date ? dRow[0] : new Date(dRow[0]);
       if (dName === studentName && (now.getTime() - dTime.getTime()) < 5000) {
         // 같은 시트이름 기반 매칭도 확인
@@ -913,7 +916,7 @@ function onFormSubmitHandler(e) {
       if (actualFormTitle) {
         var formTitleNorm = actualFormTitle.toLowerCase().replace(/\s+/g, '');
         for (var ti = 1; ti < tasksData.length; ti++) {
-          var taskTitle = String(tasksData[ti][2] != null ? tasksData[ti][2] : '').trim();
+          var taskTitle = safeStr(tasksData[ti][2]);
           if (!taskTitle) continue;
           var taskNorm = taskTitle.toLowerCase().replace(/\s+/g, '');
           if (formTitleNorm === taskNorm || formTitleNorm.indexOf(taskNorm) !== -1 || taskNorm.indexOf(formTitleNorm) !== -1) {
@@ -932,7 +935,7 @@ function onFormSubmitHandler(e) {
       if (!actualFormTitle) {
         var sheetNameNorm = sheetName.trim().toLowerCase().replace(/\s+/g, '');
         for (var ti = 1; ti < tasksData.length; ti++) {
-          var taskTitle = String(tasksData[ti][2] != null ? tasksData[ti][2] : '').trim();
+          var taskTitle = safeStr(tasksData[ti][2]);
           if (!taskTitle) continue;
           var taskNorm = taskTitle.toLowerCase().replace(/\s+/g, '');
           if (sheetNameNorm === taskNorm || sheetNameNorm.indexOf(taskNorm) !== -1 || taskNorm.indexOf(sheetNameNorm) !== -1) {
@@ -953,7 +956,7 @@ function onFormSubmitHandler(e) {
       Utilities.sleep(2000);
       values = responseSheet.getRange(responseRow, 1, 1, lastCol).getValues()[0];
       for (var c3 = 0; c3 < headers.length; c3++) {
-        var h3 = String(headers[c3] != null ? headers[c3] : '').trim().toLowerCase();
+        var h3 = safeStr(headers[c3]).toLowerCase();
         if (h3 === '점수' || h3 === 'score' || h3 === '총점') {
           var scoreStr3 = String(values[c3] != null ? values[c3] : '');
           if (scoreStr3.indexOf('/') !== -1) {
@@ -1234,12 +1237,12 @@ function getStudentsForTask(ss, taskTitle) {
   var seen = {};
 
   for (var i = 1; i < tasksData.length; i++) {
-    var tTitle = String(tasksData[i][2] != null ? tasksData[i][2] : '').trim();
+    var tTitle = safeStr(tasksData[i][2]);
     if (tTitle !== taskTitle) continue;
 
-    var tSchool = String(tasksData[i][0] != null ? tasksData[i][0] : '').trim();
-    var tGrade = String(tasksData[i][1] != null ? tasksData[i][1] : '').trim();
-    var tTargets = String(tasksData[i][5] != null ? tasksData[i][5] : '').trim();
+    var tSchool = safeStr(tasksData[i][0]);
+    var tGrade = safeStr(tasksData[i][1]);
+    var tTargets = safeStr(tasksData[i][5]);
 
     if (tTargets) {
       // 개별 학생 지정
@@ -1251,9 +1254,9 @@ function getStudentsForTask(ss, taskTitle) {
     } else if (tSchool) {
       // 학교+학년 기반
       for (var j = 1; j < studentsData.length; j++) {
-        var sName = String(studentsData[j][0] != null ? studentsData[j][0] : '').trim();
-        var sSchool = String(studentsData[j][1] != null ? studentsData[j][1] : '').trim();
-        var sGrade = String(studentsData[j][2] != null ? studentsData[j][2] : '').trim();
+        var sName = safeStr(studentsData[j][0]);
+        var sSchool = safeStr(studentsData[j][1]);
+        var sGrade = safeStr(studentsData[j][2]);
         if (sSchool === tSchool && sGrade === tGrade && sName && !seen[sName]) {
           targetStudents.push(sName);
           seen[sName] = true;
@@ -1272,9 +1275,9 @@ function getExistingSubmissions(ss, taskTitle, periodName) {
   var data = sheet.getDataRange().getValues();
   var map = {};
   for (var i = 1; i < data.length; i++) {
-    var name = String(data[i][1] != null ? data[i][1] : '').trim();
-    var title = String(data[i][2] != null ? data[i][2] : '').trim();
-    var period = String(data[i][6] != null ? data[i][6] : '').trim();
+    var name = safeStr(data[i][1]);
+    var title = safeStr(data[i][2]);
+    var period = safeStr(data[i][6]);
     if (title === taskTitle && (!periodName || !period || period === periodName)) {
       map[name] = true;
     }

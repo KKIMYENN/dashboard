@@ -1678,7 +1678,7 @@ function renderTaskStats() {
   const rows = Object.entries(taskMap).map(([title, d]) => {
     const rate = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
     const avgScore = d.scoreCount > 0 ? Math.round(d.scoreSum / d.scoreCount) : null;
-    const fillColor = rate >= 90 ? 'var(--green)' : rate >= 70 ? 'var(--blue)' : rate >= 50 ? 'var(--amber)' : 'var(--red)';
+    const fillColor = rate >= 90 ? 'var(--pass)' : rate >= 70 ? 'var(--accent)' : rate >= 50 ? 'var(--warn)' : 'var(--fail)';
     return { title, done: d.done, notDone: d.total - d.done, rate, avgScore, fillColor };
   }).sort((a, b) => a.rate - b.rate); // 완료율 낮은 순
 
@@ -1839,7 +1839,6 @@ function renderDetail(s) {
       // 타임스탬프 포맷
       let metaHtml = '';
       if (t.timestamp) {
-        const fmt = ts => { const d = new Date(ts); return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0'); };
         if (t.attempts > 1 && t.history && t.history.length > 1) {
           const lines = t.history.map((h, i) => {
             const n = i + 1;
@@ -1847,9 +1846,9 @@ function renderDetail(s) {
             const pctStr = h.pct !== null && h.pct !== undefined ? h.pct + '%' : '';
             if (isLast) {
               const hScClass = h.pct !== null ? scoreColorClass(h.pct) : '';
-              return `<span class="task-attempt-last">${n}차 ${fmt(h.timestamp)} <span class="attempt-pct ${hScClass}" onclick="event.stopPropagation();showScoreEditModal('${escAttr(s.name)}','${escAttr(t.title)}',${t.score||0},${t.total||100},'${h.timestamp||''}')">${pctStr}</span></span>`;
+              return `<span class="task-attempt-last">${n}차 ${fmtTime(h.timestamp)} <span class="attempt-pct ${hScClass}" onclick="event.stopPropagation();showScoreEditModal('${escAttr(s.name)}','${escAttr(t.title)}',${t.score||0},${t.total||100},'${h.timestamp||''}')">${pctStr}</span></span>`;
             } else {
-              return `<span class="task-time">${n}차 ${fmt(h.timestamp)} ${pctStr}</span>`;
+              return `<span class="task-time">${n}차 ${fmtTime(h.timestamp)} ${pctStr}</span>`;
             }
           }).join('');
           metaHtml = `<span class="task-meta">${lines}</span>`;
@@ -1861,7 +1860,7 @@ function renderDetail(s) {
             ${metaHtml}
           </div>`;
         } else {
-          metaHtml = `<span class="task-time">${fmt(t.timestamp)}</span>`;
+          metaHtml = `<span class="task-time">${fmtTime(t.timestamp)}</span>`;
         }
       }
 
@@ -2207,8 +2206,14 @@ function showToast(msg) {
 }
 
 // ══════════════════════════════════════════
-//  HTML Escape
+//  Utilities
 // ══════════════════════════════════════════
+function fmtTime(ts) {
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 function esc(str) {
   if (!str) return '';
   const d = document.createElement('div');
