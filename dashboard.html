@@ -1334,126 +1334,6 @@ function getSchoolsByGrade(grade) {
   return [...new Set(students.filter(s => String(s.grade) === String(grade)).map(s => s.school))];
 }
 
-function showWeeklyTaskModal(weekNum) {
-  const schools = getAvailableSchools();
-  const allGrades = dashboardData ? (dashboardData.grades || []) : [...new Set(DEMO_PROFILES.map(p => p.grade))].sort();
-  const container = document.getElementById('modalContainer');
-
-  let schoolCheckboxes = schools.map(s =>
-    `<label><input type="checkbox" class="school-cb" value="${s}"> ${s}</label>`
-  ).join('');
-
-  let gradeButtons = allGrades.map(g => {
-    const label = /^\d+$/.test(g) ? `고${g}` : g;  // '1'→'고1', '고1'→'고1'
-    return `<button type="button" onclick="selectByGrade('${g}')">${label}</button>`;
-  }).join('');
-
-  container.innerHTML = `
-    <div class="modal-overlay" onclick="closeModal(event)">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:460px">
-        <h3>📋 ${weekNum}주차 과제 등록</h3>
-
-        <label>과제명</label>
-        <input id="wtLabel" type="text" placeholder="예: YBM박 1과">
-
-        <label>대상 학교</label>
-        <div class="school-quick-btns">
-          <button type="button" onclick="toggleAllSchools()">전체</button>
-          ${gradeButtons}
-        </div>
-        <div class="school-picker" id="schoolPicker">
-          ${schoolCheckboxes}
-        </div>
-
-        <label>문제 형태</label>
-        <div class="format-radios">
-          <label><input type="radio" name="wtFormat" value="링크" onchange="onFormatChange('링크')"> 🔗 링크</label>
-          <label><input type="radio" name="wtFormat" value="프린트" checked onchange="onFormatChange('프린트')"> 🖨 프린트</label>
-          <label><input type="radio" name="wtFormat" value="자가채점" onchange="onFormatChange('자가채점')"> ✅ 자가채점</label>
-        </div>
-
-        <div id="urlField" class="url-field hidden">
-          <label>링크 URL</label>
-          <input id="wtLink" type="url" placeholder="https://...">
-        </div>
-
-        <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분)</span></label>
-        <input id="wtItems" type="text" placeholder="예: 내용일치, 빈칸추론, 어법">
-
-        <div class="modal-btns">
-          <button class="btn-cancel" onclick="document.getElementById('modalContainer').innerHTML=''">취소</button>
-          <button class="btn-confirm" onclick="submitWeeklyTask(${weekNum})">등록</button>
-        </div>
-      </div>
-    </div>`;
-}
-
-function toggleAllSchools() {
-  const cbs = document.querySelectorAll('.school-cb');
-  const allChecked = [...cbs].every(cb => cb.checked);
-  cbs.forEach(cb => cb.checked = !allChecked);
-}
-
-function selectByGrade(grade) {
-  const gradeSchools = getSchoolsByGrade(grade);
-  const cbs = document.querySelectorAll('.school-cb');
-  cbs.forEach(cb => {
-    if (gradeSchools.includes(cb.value)) cb.checked = true;
-  });
-}
-
-function onFormatChange(format) {
-  const urlField = document.getElementById('urlField');
-  if (format === '링크') {
-    urlField.classList.remove('hidden');
-    urlField.classList.add('visible');
-  } else {
-    urlField.classList.remove('visible');
-    urlField.classList.add('hidden');
-  }
-}
-
-async function submitWeeklyTask(weekNum) {
-  const label = document.getElementById('wtLabel').value.trim();
-  if (!label) { showToast('과제명을 입력하세요.'); return; }
-
-  const checkedSchools = [...document.querySelectorAll('.school-cb:checked')].map(cb => cb.value);
-  if (checkedSchools.length === 0) { showToast('대상 학교를 선택하세요.'); return; }
-
-  const allSchools = getAvailableSchools();
-  const schoolsStr = checkedSchools.length === allSchools.length ? '전체' : checkedSchools.join(',');
-
-  const format = document.querySelector('input[name="wtFormat"]:checked').value;
-  const link = format === '링크' ? (document.getElementById('wtLink').value.trim() || '') : '';
-  const items = document.getElementById('wtItems').value.trim();
-
-  // 모달 닫기
-  document.getElementById('modalContainer').innerHTML = '';
-
-  if (demoMode) {
-    // 데모: 메모리에 직접 추가
-    if (!weeklySchoolTasks[weekNum]) weeklySchoolTasks[weekNum] = [];
-    const schools = schoolsStr === '전체' ? allSchools : schoolsStr.split(',');
-    weeklySchoolTasks[weekNum].push({
-      label, schools, format, link,
-      items: items ? items.split(',').map(s => s.trim()).filter(Boolean) : []
-    });
-    // 학생 데이터 재생성 (새 과제의 totalCount 반영)
-    dashboardData = getDemoData();
-    renderAll();
-    showToast('과제가 등록되었습니다. (데모)');
-  } else {
-    const result = await postAction({
-      action: '주간과제저장',
-      weekNum, label, schools: schoolsStr, format, link, items
-    });
-    if (result && result.success) {
-      // 서버에서 갱신된 데이터 가져오기
-      await fetchData();
-      showToast('과제가 등록되었습니다.');
-    }
-  }
-}
 
 async function deleteWeeklyTask(weekNum, label) {
   if (!confirm(`"${label}" 과제를 삭제할까요?`)) return;
@@ -1470,7 +1350,7 @@ async function deleteWeeklyTask(weekNum, label) {
     renderAll();
     showToast('과제가 삭제되었습니다. (데모)');
   } else {
-    const result = await postAction({ action: '주간과제삭제', weekNum, label });
+    const result = await postAction({ action: '과제삭제', title: label, weekNum });
     if (result && result.success) {
       await fetchData();
       showToast('과제가 삭제되었습니다.');
@@ -1513,7 +1393,7 @@ function setCalMonth(delta) {
 
 function renderWeekTasksHtml(weekNum) {
   const groups = weeklySchoolTasks[weekNum];
-  const addBtn = `<span class="wt-add-btn" onclick="showWeeklyTaskModal(${weekNum})" title="과제 추가">➕</span>`;
+  const addBtn = `<span class="wt-add-btn" onclick="showTaskMgmtModal('add', ${weekNum})" title="과제 추가">➕</span>`;
   if (!groups || groups.length === 0) {
     return `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${weekNum}주차 과제 ${addBtn}</div><div style="font-size:13px;color:var(--text-3)">이 주차에 배정된 과제가 없습니다.</div></div>`;
   }
@@ -2044,27 +1924,38 @@ async function deleteTask(title, school, grade) {
 }
 
 // ══════════════════════════════════════════
-//  과제 관리 모달 (등록 / 목록·삭제)
+//  과제 관리 모달 (등록 / 목록·삭제) — 통합
 // ══════════════════════════════════════════
-function showTaskMgmtModal(tab) {
+function showTaskMgmtModal(tab, preWeekNum) {
   tab = tab || 'add';
   const schools   = getAvailableSchools();
   const allGrades = dashboardData ? (dashboardData.grades || []) : ['1','2','3'];
   const container = document.getElementById('modalContainer');
 
-  const schoolOptions = schools.map(s => `<option value="${escAttr(s)}">${s}</option>`).join('');
-  const gradeOptions  = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+  const schoolOptions  = schools.map(s => `<option value="${escAttr(s)}">${s}</option>`).join('');
+  const gradeOptions   = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+  const schoolCheckboxes = schools.map(s =>
+    `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
+      <input type="checkbox" class="school-cb" value="${escAttr(s)}"> ${s}</label>`
+  ).join('');
+  const gradeQuickBtns = allGrades.map(g => {
+    const lbl = /^\d+$/.test(String(g)) ? `고${g}` : g;
+    return `<button type="button" onclick="selectSchoolsByGrade('${g}')" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:var(--bg-2)">${lbl}</button>`;
+  }).join('');
 
   // ── 목록 탭 내용 ──
   const assignments = (dashboardData && dashboardData.taskAssignments) || [];
 
   function assignLabel(a) {
-    const fmt = a.format === '프린트' ? ' · 🖨 프린트' : ' · 🔗 링크';
-    if (a.students) return `👤 ${a.students}${fmt}`;
-    if (!a.school)  return `🌐 전체${fmt}`;
+    const fmtLabel = a.format === '프린트' ? ' · 🖨' : a.format === '자가채점' ? ' · ✅' : ' · 🔗';
+    const wkLabel  = a.weekNum ? ` [${a.weekNum}주차]` : '';
+    if (a.students) return `👤 ${a.students}${fmtLabel}${wkLabel}`;
+    if (!a.school)  return `🌐 전체${fmtLabel}${wkLabel}`;
+    const hasComma = a.school.indexOf(',') !== -1;
+    if (hasComma)   return `🏫 ${a.school}${fmtLabel}${wkLabel}`;
     const looksLikeSchool = /고$/.test(a.school.trim());
-    if (!looksLikeSchool) return `📖 ${a.school}${fmt}`;
-    return `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}${fmt}`;
+    if (!looksLikeSchool) return `📖 ${a.school}${fmtLabel}${wkLabel}`;
+    return `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}${fmtLabel}${wkLabel}`;
   }
 
   const listRows = assignments.length === 0
@@ -2073,7 +1964,7 @@ function showTaskMgmtModal(tab) {
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(a.title)}">${esc(a.title)}</div>
-          <div style="font-size:11px;color:var(--text-3)">${assignLabel(a)}</div>
+          <div style="font-size:11px;color:var(--text-3)">${assignLabel(a)}${a.items ? ' · <span style="color:var(--text-2)">' + esc(a.items) + '</span>' : ''}</div>
         </div>
         <button class="task-icon-btn" title="삭제" style="color:var(--danger,#ef4444);font-size:16px;flex-shrink:0"
           onclick="deleteTaskFromMgmt(${i})">🗑</button>
@@ -2081,17 +1972,17 @@ function showTaskMgmtModal(tab) {
 
   container.innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:480px">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
         <h3>📋 과제 관리</h3>
 
         <!-- 탭 -->
         <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border)">
-          <button id="tm-tab-add"  onclick="switchTaskTab('add')"
+          <button onclick="switchTaskTab('add')"
             style="flex:1;padding:8px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
               ${tab==='add'  ? 'border-bottom:2px solid var(--accent);color:var(--accent);margin-bottom:-2px' : 'color:var(--text-3)'}">
             ➕ 등록
           </button>
-          <button id="tm-tab-list" onclick="switchTaskTab('list')"
+          <button onclick="switchTaskTab('list')"
             style="flex:1;padding:8px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;
               ${tab==='list' ? 'border-bottom:2px solid var(--accent);color:var(--accent);margin-bottom:-2px' : 'color:var(--text-3)'}">
             📄 목록 (${assignments.length})
@@ -2100,13 +1991,14 @@ function showTaskMgmtModal(tab) {
 
         <!-- 등록 탭 -->
         <div id="tm-pane-add" style="display:${tab==='add'?'':'none'}">
-          <label>퀴즈 제목 <span style="color:var(--fail)">*</span></label>
+          <label>과제 제목 <span style="color:var(--fail)">*</span></label>
           <input id="ta-title" type="text" placeholder="예: 문법-시제가정법 (구글폼 제목과 동일하게)">
 
           <label>형태</label>
           <div class="format-radios" style="gap:16px;margin-bottom:8px">
             <label><input type="radio" name="ta-format" value="링크" checked onchange="onTaskFormatChange(this.value)"> 🔗 링크</label>
             <label><input type="radio" name="ta-format" value="프린트" onchange="onTaskFormatChange(this.value)"> 🖨 프린트</label>
+            <label><input type="radio" name="ta-format" value="자가채점" onchange="onTaskFormatChange(this.value)"> ✅ 자가채점</label>
           </div>
 
           <div id="ta-link-field">
@@ -2115,31 +2007,48 @@ function showTaskMgmtModal(tab) {
           </div>
 
           <label>배정 기준</label>
-          <div class="format-radios" style="gap:12px;margin-bottom:8px">
+          <div class="format-radios" style="gap:10px;flex-wrap:wrap;margin-bottom:8px">
             <label><input type="radio" name="ta-type" value="school" checked onchange="onTaskTypeChange(this.value)"> 학교+학년</label>
+            <label><input type="radio" name="ta-type" value="schools" onchange="onTaskTypeChange(this.value)"> 학교 다중선택</label>
             <label><input type="radio" name="ta-type" value="textbook" onchange="onTaskTypeChange(this.value)"> 교과서</label>
             <label><input type="radio" name="ta-type" value="all" onchange="onTaskTypeChange(this.value)"> 전체</label>
             <label><input type="radio" name="ta-type" value="students" onchange="onTaskTypeChange(this.value)"> 개별학생</label>
           </div>
 
+          <!-- 학교+학년 -->
           <div id="ta-school-fields">
             <label>학교</label>
             <select id="ta-school" style="width:100%;margin-bottom:8px">
-              <option value="">-- 학교 선택 (비우면 전체) --</option>
-              ${schoolOptions}
+              <option value="">-- 학교 선택 --</option>${schoolOptions}
             </select>
             <label>학년</label>
             <select id="ta-grade" style="width:100%;margin-bottom:8px">
-              <option value="">-- 학년 선택 (비우면 전체) --</option>
-              ${gradeOptions}
+              <option value="">-- 학년 선택 (비우면 전학년) --</option>${gradeOptions}
             </select>
           </div>
 
+          <!-- 학교 다중선택 -->
+          <div id="ta-schools-fields" style="display:none">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+              <button type="button" onclick="toggleAllSchoolsCb()" style="font-size:11px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:var(--bg-2)">전체</button>
+              ${gradeQuickBtns}
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 12px;max-height:120px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px">
+              ${schoolCheckboxes}
+            </div>
+            <label>주차 <span style="color:var(--fail)">*</span> <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시)</span></label>
+            <input id="ta-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;margin-bottom:8px">
+            <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
+            <input id="ta-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
+          </div>
+
+          <!-- 교과서 -->
           <div id="ta-textbook-fields" style="display:none">
             <label>교과서명</label>
             <input id="ta-textbook" type="text" placeholder="예: 공통영어1 천재조">
           </div>
 
+          <!-- 개별학생 -->
           <div id="ta-students-fields" style="display:none">
             <label>대상 학생 <span style="font-size:11px;color:var(--text-3)">(쉼표로 구분)</span></label>
             <input id="ta-students" type="text" placeholder="예: 김영희, 이철수">
@@ -2152,7 +2061,7 @@ function showTaskMgmtModal(tab) {
         </div>
 
         <!-- 목록 탭 -->
-        <div id="tm-pane-list" style="display:${tab==='list'?'':'none'};max-height:360px;overflow-y:auto">
+        <div id="tm-pane-list" style="display:${tab==='list'?'':'none'};max-height:380px;overflow-y:auto">
           ${listRows}
         </div>
         ${tab==='list' ? `<div class="modal-btns" style="margin-top:12px">
@@ -2160,6 +2069,11 @@ function showTaskMgmtModal(tab) {
         </div>` : ''}
       </div>
     </div>`;
+
+  if (preWeekNum && tab === 'add') {
+    const schoolsRadio = document.querySelector('input[name="ta-type"][value="schools"]');
+    if (schoolsRadio) { schoolsRadio.checked = true; onTaskTypeChange('schools'); }
+  }
 }
 
 function switchTaskTab(tab) {
@@ -2168,12 +2082,26 @@ function switchTaskTab(tab) {
 
 function onTaskTypeChange(type) {
   document.getElementById('ta-school-fields').style.display   = type === 'school'   ? '' : 'none';
-  document.getElementById('ta-textbook-fields').style.display  = type === 'textbook' ? '' : 'none';
-  document.getElementById('ta-students-fields').style.display  = type === 'students' ? '' : 'none';
+  document.getElementById('ta-schools-fields').style.display  = type === 'schools'  ? '' : 'none';
+  document.getElementById('ta-textbook-fields').style.display = type === 'textbook' ? '' : 'none';
+  document.getElementById('ta-students-fields').style.display = type === 'students' ? '' : 'none';
 }
 
 function onTaskFormatChange(fmt) {
-  document.getElementById('ta-link-field').style.display = fmt === '프린트' ? 'none' : '';
+  document.getElementById('ta-link-field').style.display = (fmt === '프린트' || fmt === '자가채점') ? 'none' : '';
+}
+
+function toggleAllSchoolsCb() {
+  const cbs = document.querySelectorAll('.school-cb');
+  const allChecked = [...cbs].every(cb => cb.checked);
+  cbs.forEach(cb => cb.checked = !allChecked);
+}
+
+function selectSchoolsByGrade(grade) {
+  const gradeSchools = getSchoolsByGrade(grade);
+  document.querySelectorAll('.school-cb').forEach(cb => {
+    if (gradeSchools.includes(cb.value)) cb.checked = true;
+  });
 }
 
 async function deleteTaskFromMgmt(idx) {
@@ -2182,7 +2110,12 @@ async function deleteTaskFromMgmt(idx) {
   if (!a) return;
   const label = a.school ? ` (${a.school}${a.grade?' '+a.grade+'학년':''})` : a.students ? ` (${a.students})` : ' (전체)';
   if (!confirm(`"${a.title}"${label} 과제를 삭제하시겠습니까?`)) return;
-  const result = await postAction({ action: '과제삭제', title: a.title, school: a.school || '', grade: a.grade || '' });
+  const result = await postAction({
+    action: '과제삭제', title: a.title,
+    school: a.school || '', grade: a.grade || '',
+    students: a.students || '',
+    weekNum: a.weekNum || ''
+  });
   if (result && result.success) {
     showToast(`"${a.title}" 삭제 완료`);
     await new Promise(r => setTimeout(r, 800));
@@ -2194,17 +2127,25 @@ async function deleteTaskFromMgmt(idx) {
 async function submitTaskAdd() {
   const title  = document.getElementById('ta-title').value.trim();
   const format = document.querySelector('input[name="ta-format"]:checked').value;
-  const link   = format === '프린트' ? '' : document.getElementById('ta-link').value.trim();
+  const link   = (format === '링크') ? document.getElementById('ta-link').value.trim() : '';
   const type   = document.querySelector('input[name="ta-type"]:checked').value;
 
-  if (!title) { alert('퀴즈 제목을 입력해주세요.'); return; }
+  if (!title) { alert('과제 제목을 입력해주세요.'); return; }
   if (format === '링크' && !link) { alert('구글폼 링크를 입력해주세요.'); return; }
 
-  const payload = { action: '과제등록', title, link, format, assignType: type === 'all' ? 'school' : type };
+  const payload = { action: '과제등록', title, link, format, assignType: type };
 
   if (type === 'school') {
     payload.school = document.getElementById('ta-school').value.trim();
     payload.grade  = document.getElementById('ta-grade').value.trim();
+  } else if (type === 'schools') {
+    const checked = [...document.querySelectorAll('.school-cb:checked')].map(cb => cb.value);
+    const wn = document.getElementById('ta-weeknum').value.trim();
+    if (!wn) { alert('주차를 입력해주세요.'); return; }
+    const allSchools = getAvailableSchools();
+    payload.schools  = checked.length === allSchools.length ? '' : checked.join(',');
+    payload.weekNum  = wn;
+    payload.items    = document.getElementById('ta-items').value.trim();
   } else if (type === 'textbook') {
     const tb = document.getElementById('ta-textbook').value.trim();
     if (!tb) { alert('교과서명을 입력해주세요.'); return; }
@@ -2214,7 +2155,7 @@ async function submitTaskAdd() {
     if (!st) { alert('대상 학생을 입력해주세요.'); return; }
     payload.students = st;
   }
-  // 'all' → school/grade 비워서 전체 배정
+  // 'all' → assignType='all', school/grade 비워서 전체 배정 (globalTasks)
 
   const result = await postAction(payload);
   if (result && result.success) {

@@ -87,11 +87,11 @@ function doPost(e) {
       case '기간전환':
         result = handleSwitchPeriod(params);
         break;
-      case '주간과제저장':
-        result = handleWeeklyTaskSave(params);
+      case '주간과제저장': // legacy → 과제등록으로 통합
+        result = handleTaskAdd(Object.assign({ assignType: 'schools', schools: params.schools || '', weekNum: params.weekNum, items: params.items || '', title: params.label || params.title || '', link: params.link || '', format: params.format || '프린트' }, params));
         break;
-      case '주간과제삭제':
-        result = handleWeeklyTaskDelete(params);
+      case '주간과제삭제': // legacy → 과제삭제로 통합
+        result = handleTaskDelete({ title: params.label || params.title || '', weekNum: params.weekNum });
         break;
       case '주간과제조회':
         result = handleWeeklyTaskList();
@@ -449,8 +449,9 @@ function getDashboardData(requestedPeriod) {
   }
 
   // --- 학교+학년/교과서 → 할일 목록 맵 + 개별 학생 할일 ---
-  var taskMap = {};       // key: "학교_학년" → [{title, link}]
-  var studentTaskMap = {}; // key: "학생이름" → [{title, link}]
+  var taskMap = {};        // key: "학교_학년" → [{title, link, format}]
+  var studentTaskMap = {}; // key: "학생이름" → [{title, link, format}]
+  var globalTasks = [];    // A='', B='', F='' → 전체 학생 배정
 
   for (var i = 1; i < tasksRaw.length; i++) {
     var row = tasksRaw[i];
@@ -463,9 +464,13 @@ function getDashboardData(requestedPeriod) {
     var tTitle   = String(row[2] != null ? row[2] : '').trim();
     var tLink    = String(row[3] != null ? row[3] : '').trim();
     var tTargets = String(row[5] != null ? row[5] : '').trim();
-    var tFormat  = String(row[6] != null ? row[6] : '').trim() || '링크'; // G열: 링크/프린트
+    var tFormat  = String(row[6] != null ? row[6] : '').trim() || '링크'; // G열
 
     if (!tTitle) continue;
+
+    // 다중학교(쉼표 포함) 또는 주간과제 타입 → allWeeklyTasks에서 처리
+    var hasComma = tSchool.indexOf(',') !== -1;
+    if (hasComma) continue;
 
     var taskObj = { title: tTitle, link: tLink || '', format: tFormat };
 
@@ -478,14 +483,17 @@ function getDashboardData(requestedPeriod) {
         if (!studentTaskMap[targetName]) studentTaskMap[targetName] = [];
         studentTaskMap[targetName].push(taskObj);
       }
-    } else if (tSchool && textbookReverseMap[tSchool]) {
+    } else if (!tSchool) {
+      // A열 비어있고 대상학생도 없음 → 전체 배정
+      globalTasks.push(taskObj);
+    } else if (textbookReverseMap[tSchool]) {
       // A열이 교과서명인 경우 → 해당 교과서 쓰는 모든 학교_학년에 배정
       var tbKeys = textbookReverseMap[tSchool];
       for (var tk = 0; tk < tbKeys.length; tk++) {
         if (!taskMap[tbKeys[tk]]) taskMap[tbKeys[tk]] = [];
         taskMap[tbKeys[tk]].push(taskObj);
       }
-    } else if (tSchool) {
+    } else {
       // 학교+학년 지정 → 해당 학생 전원
       var key = tSchool + '_' + tGrade;
       if (!taskMap[key]) taskMap[key] = [];
@@ -624,7 +632,15 @@ function getDashboardData(requestedPeriod) {
       }
     }
 
-    // --- 주간과제 자동 연동 ---
+    // 전체 배정 할일 (A='', B='', F='')
+    for (var gti = 0; gti < globalTasks.length; gti++) {
+      if (!seenTitles[globalTasks[gti].title]) {
+        assignedTasks.push(globalTasks[gti]);
+        seenTitles[globalTasks[gti].title] = true;
+      }
+    }
+
+    // --- 주간과제/다중학교 자동 연동 ---
     for (var wTag in allWeeklyTasks) {
       if (allWeeklyTasks.hasOwnProperty(wTag)) {
         var weekList = allWeeklyTasks[wTag];
@@ -796,7 +812,7 @@ function getDashboardData(requestedPeriod) {
     activePeriod: activePeriod,
     schools: Object.keys(schoolsSet).sort(),
     grades: Object.keys(gradesSet).sort(),
-    weeklyTasks: allWeeklyTasks,
+    weeklyTasks: getWeeklyDisplayData(ss),
     taskAssignments: (function() {
       var rows = [];
       for (var ti = 1; ti < tasksRaw.length; ti++) {
@@ -807,8 +823,15 @@ function getDashboardData(requestedPeriod) {
         var link     = String(row[3] || '').trim();
         var students = String(row[5] || '').trim();
         var format   = String(row[6] || '').trim() || '링크';
+        var weekNum  = row[7] ? parseInt(String(row[7]), 10) : null;
+        var items    = String(row[8] || '').trim();
         if (!title) continue;
-        rows.push({ school: school, grade: grade, title: title, link: link, students: students, format: format });
+        rows.push({
+          school: school, grade: grade, title: title, link: link,
+          students: students, format: format,
+          weekNum: isNaN(weekNum) ? null : weekNum,
+          items: items
+        });
       }
       return rows;
     })()
@@ -1464,36 +1487,120 @@ function getOrCreateWeeklySheet(ss) {
   return sheet;
 }
 
-/** 주간과제 시트 → { weekNum: [{label, schools[], format, link, items[]}] } */
-function getWeeklyTasksData(ss) {
-  var sheet = ss.getSheetByName(SHEET_WEEKLY);
-  if (!sheet) return {};
-
-  var data = sheet.getDataRange().getValues();
+/**
+ * 캘린더 표시용: SHEET_TASKS에서 weekNum 있는 모든 행 + 구 SHEET_WEEKLY
+ * → { weekNum: [{label, schools[], format, link, items[]}] }
+ */
+function getWeeklyDisplayData(ss) {
   var result = {};
 
-  for (var i = 1; i < data.length; i++) {
-    var weekNum = parseInt(data[i][0], 10);
-    if (isNaN(weekNum)) continue;
+  // (1) 구 주간과제 시트 (backward compat)
+  var oldSheet = ss.getSheetByName(SHEET_WEEKLY);
+  if (oldSheet) {
+    var oldData = oldSheet.getDataRange().getValues();
+    for (var i = 1; i < oldData.length; i++) {
+      var weekNum = parseInt(oldData[i][0], 10);
+      if (isNaN(weekNum)) continue;
+      var label = String(oldData[i][1] || '').trim();
+      if (!label) continue;
+      var schoolsStr = String(oldData[i][2] || '').trim();
+      var schools = (!schoolsStr || schoolsStr === '전체')
+        ? ['전체']
+        : schoolsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      var format  = String(oldData[i][3] || '').trim() || '프린트';
+      var link    = String(oldData[i][4] || '').trim();
+      var itemsStr = String(oldData[i][5] || '').trim();
+      var items   = itemsStr ? itemsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+      if (!result[weekNum]) result[weekNum] = [];
+      result[weekNum].push({ label: label, schools: schools, format: format, link: link, items: items });
+    }
+  }
 
-    var label = String(data[i][1] || '').trim();
-    if (!label) continue;
+  // (2) 할일배정 시트에서 weekNum 있는 모든 행 (단일학교 포함)
+  var newSheet = ss.getSheetByName(SHEET_TASKS);
+  if (newSheet) {
+    var newData = newSheet.getDataRange().getValues();
+    for (var j = 1; j < newData.length; j++) {
+      var wn = parseInt(String(newData[j][7] || ''), 10);
+      if (isNaN(wn) || wn <= 0) continue;
+      var label2 = String(newData[j][2] || '').trim();
+      if (!label2) continue;
+      var schoolRaw = String(newData[j][0] || '').trim();
+      var grade2    = String(newData[j][1] || '').trim().replace(/[^0-9]/g, '');
+      var schools2;
+      if (!schoolRaw) {
+        schools2 = ['전체'];
+      } else if (schoolRaw.indexOf(',') !== -1) {
+        schools2 = schoolRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      } else {
+        schools2 = [schoolRaw + (grade2 ? ' ' + grade2 + '학년' : '')];
+      }
+      var format2   = String(newData[j][6] || '').trim() || '프린트';
+      var link2     = String(newData[j][3] || '').trim();
+      var itemsStr2 = String(newData[j][8] || '').trim();
+      var items2    = itemsStr2 ? itemsStr2.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+      if (!result[wn]) result[wn] = [];
+      result[wn].push({ label: label2, schools: schools2, format: format2, link: link2, items: items2 });
+    }
+  }
 
-    var schoolsStr = String(data[i][2] || '').trim();
-    var schools = schoolsStr === '전체' ? ['전체'] : schoolsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-    var format = String(data[i][3] || '').trim() || '프린트';
-    var link = String(data[i][4] || '').trim();
-    var itemsStr = String(data[i][5] || '').trim();
-    var items = itemsStr ? itemsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+  return result;
+}
 
-    if (!result[weekNum]) result[weekNum] = [];
-    result[weekNum].push({
-      label: label,
-      schools: schools,
-      format: format,
-      link: link,
-      items: items
-    });
+/**
+ * 주간과제 데이터 빌드
+ * - 구 SHEET_WEEKLY (backward compat)
+ * - 신 SHEET_TASKS의 H열(weekNum) 있는 행 중 A열이 비었거나 쉼표 포함(다중학교/전체)
+ * → { weekNum: [{label, schools[], format, link, items[]}] }
+ */
+function getWeeklyTasksData(ss) {
+  var result = {};
+
+  // (1) 구 주간과제 시트 (backward compat)
+  var oldSheet = ss.getSheetByName(SHEET_WEEKLY);
+  if (oldSheet) {
+    var oldData = oldSheet.getDataRange().getValues();
+    for (var i = 1; i < oldData.length; i++) {
+      var weekNum = parseInt(oldData[i][0], 10);
+      if (isNaN(weekNum)) continue;
+      var label = String(oldData[i][1] || '').trim();
+      if (!label) continue;
+      var schoolsStr = String(oldData[i][2] || '').trim();
+      var schools = (!schoolsStr || schoolsStr === '전체')
+        ? ['전체']
+        : schoolsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      var format  = String(oldData[i][3] || '').trim() || '프린트';
+      var link    = String(oldData[i][4] || '').trim();
+      var itemsStr = String(oldData[i][5] || '').trim();
+      var items   = itemsStr ? itemsStr.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+      if (!result[weekNum]) result[weekNum] = [];
+      result[weekNum].push({ label: label, schools: schools, format: format, link: link, items: items });
+    }
+  }
+
+  // (2) 할일배정 시트에서 weekNum 있는 행 (다중학교/전체만 학생 배정에 사용)
+  var newSheet = ss.getSheetByName(SHEET_TASKS);
+  if (newSheet) {
+    var newData = newSheet.getDataRange().getValues();
+    for (var j = 1; j < newData.length; j++) {
+      var wn = parseInt(String(newData[j][7] || ''), 10);
+      if (isNaN(wn) || wn <= 0) continue;
+      var schoolRaw = String(newData[j][0] || '').trim();
+      var hasComma  = schoolRaw.indexOf(',') !== -1;
+      var isEmpty   = !schoolRaw;
+      if (!hasComma && !isEmpty) continue; // 단일학교+학년 → taskMap이 처리
+      var label2 = String(newData[j][2] || '').trim();
+      if (!label2) continue;
+      var schools2  = isEmpty
+        ? ['전체']
+        : schoolRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      var format2   = String(newData[j][6] || '').trim() || '프린트';
+      var link2     = String(newData[j][3] || '').trim();
+      var itemsStr2 = String(newData[j][8] || '').trim();
+      var items2    = itemsStr2 ? itemsStr2.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+      if (!result[wn]) result[wn] = [];
+      result[wn].push({ label: label2, schools: schools2, format: format2, link: link2, items: items2 });
+    }
   }
 
   return result;
@@ -1520,14 +1627,16 @@ function handleWeeklyTaskSave(params) {
   return { success: true, action: '주간과제저장', weekNum: weekNum, label: label };
 }
 
-/** 할일배정 삭제 핸들러
- * school/grade 미지정 시 해당 title의 모든 행 삭제 (전체 삭제)
- * school 또는 grade 지정 시 해당 행만 삭제 (특정 배정 삭제)
+/** 과제 삭제 핸들러
+ * school/grade/weekNum/students 미지정 시 동일 title 전부 삭제
+ * 지정 시 해당 행만 삭제
  */
 function handleTaskDelete(params) {
-  var tTitle  = (params.title  || '').trim();
-  var tSchool = (params.school || '').trim();
-  var tGrade  = String(params.grade || '').trim().replace(/[^0-9]/g, '');
+  var tTitle    = (params.title    || '').trim();
+  var tSchool   = (params.school   || '').trim();
+  var tGrade    = String(params.grade || '').trim().replace(/[^0-9]/g, '');
+  var tStudents = (params.students || '').trim();
+  var tWeekNum  = params.weekNum ? parseInt(params.weekNum, 10) : null;
   if (!tTitle) return { error: 'title이 필요합니다.' };
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1536,28 +1645,34 @@ function handleTaskDelete(params) {
 
   var data = sheet.getDataRange().getValues();
   var deleted = 0;
+  var hasFilter = !!(tSchool || tGrade || tStudents || tWeekNum);
   for (var i = data.length - 1; i >= 1; i--) {
-    var rowSchool = String(data[i][0] || '').trim();
-    var rowGrade  = String(data[i][1] || '').trim().replace(/[^0-9]/g, '');
-    var rowTitle  = String(data[i][2] || '').trim();
+    var rowSchool   = String(data[i][0] || '').trim();
+    var rowGrade    = String(data[i][1] || '').trim().replace(/[^0-9]/g, '');
+    var rowTitle    = String(data[i][2] || '').trim();
+    var rowStudents = String(data[i][5] || '').trim();
+    var rowWeekNum  = data[i][7] ? parseInt(String(data[i][7]), 10) : null;
     if (rowTitle !== tTitle) continue;
-    if (tSchool && rowSchool !== tSchool) continue;
-    if (tGrade  && rowGrade  !== tGrade)  continue;
+    if (tSchool   && rowSchool   !== tSchool)   continue;
+    if (tGrade    && rowGrade    !== tGrade)     continue;
+    if (tStudents && rowStudents !== tStudents)  continue;
+    if (tWeekNum  && rowWeekNum  !== tWeekNum)   continue;
     sheet.deleteRow(i + 1);
     deleted++;
-    // school/grade 지정 시 첫 매칭만 삭제
-    if (tSchool || tGrade) break;
+    if (hasFilter) break; // 특정 배정만 삭제
   }
   if (deleted === 0) return { error: '해당 과제를 찾을 수 없습니다: ' + tTitle };
   return { success: true, action: '과제삭제', title: tTitle, deleted: deleted };
 }
 
-/** 할일 등록 핸들러 */
+/** 과제 등록 핸들러 */
 function handleTaskAdd(params) {
   var tTitle     = (params.title    || '').trim();
   var tLink      = (params.link     || '').trim();
-  var tFormat    = (params.format   || '링크').trim(); // G열: 링크/프린트
-  var assignType = (params.assignType || 'school').trim(); // 'school' | 'textbook' | 'students'
+  var tFormat    = (params.format   || '링크').trim(); // G열: 링크/프린트/자가채점
+  var assignType = (params.assignType || 'school').trim();
+  var tWeekNum   = params.weekNum ? String(parseInt(params.weekNum, 10)) : ''; // H열
+  var tItems     = (params.items    || '').trim(); // I열: 문제유형
 
   if (!tTitle) return { error: 'title이 필요합니다.' };
   if (tFormat === '링크' && !tLink) return { error: 'link가 필요합니다.' };
@@ -1569,17 +1684,23 @@ function handleTaskAdd(params) {
   if (assignType === 'school') {
     var tSchool = (params.school || '').trim();
     var tGrade  = String(params.grade || '').trim().replace(/[^0-9]/g, '');
-    sheet.appendRow([tSchool, tGrade, tTitle, tLink, '', '', tFormat]);
+    sheet.appendRow([tSchool, tGrade, tTitle, tLink, '', '', tFormat, tWeekNum, tItems]);
+
+  } else if (assignType === 'schools') {
+    // 학교 다중선택: A열에 쉼표 구분 학교 목록 (빈 값 = 전체)
+    var tSchools = (params.schools || '').trim();
+    if (!tWeekNum) return { error: 'schools 배정은 주차(weekNum)가 필요합니다.' };
+    sheet.appendRow([tSchools, '', tTitle, tLink, '', '', tFormat, tWeekNum, tItems]);
 
   } else if (assignType === 'textbook') {
     var tTextbook = (params.textbook || '').trim();
     if (!tTextbook) return { error: 'textbook이 필요합니다.' };
-    sheet.appendRow([tTextbook, '', tTitle, tLink, '', '', tFormat]);
+    sheet.appendRow([tTextbook, '', tTitle, tLink, '', '', tFormat, tWeekNum, tItems]);
 
   } else if (assignType === 'students') {
     var tStudents = (params.students || '').trim();
     if (!tStudents) return { error: 'students가 필요합니다.' };
-    sheet.appendRow(['', '', tTitle, tLink, '', tStudents, tFormat]);
+    sheet.appendRow(['', '', tTitle, tLink, '', tStudents, tFormat, tWeekNum, tItems]);
 
   } else {
     return { error: '알 수 없는 assignType: ' + assignType };
