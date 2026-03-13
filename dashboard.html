@@ -1275,6 +1275,16 @@ function startPolling() {
   pollTimer = setInterval(fetchData, 5000);
 }
 
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  } else {
+    fetchData();
+    startPolling();
+  }
+});
+
 function updatePollStatus(ok) {
   const dot = document.getElementById('pollDot');
   const status = document.getElementById('pollStatus');
@@ -1833,8 +1843,9 @@ function renderDetail(s) {
     if (t.done) {
       const pctDisplay = t.pct !== null && t.pct !== undefined ? t.pct + '%' : (t.score + '/' + t.total);
       const scClass = t.pct !== null ? scoreColorClass(t.pct) : '';
-      const manualTag = t.manual ? ' <span class="task-tag">(수동)</span>' : '';
-      const editedTag = t.edited ? ' <span class="task-tag" style="color:var(--warn);">(수정)</span>' : '';
+      const manualTag  = t.manual  ? ' <span class="task-tag">(수동)</span>' : '';
+      const editedTag  = t.edited  ? ' <span class="task-tag" style="color:var(--warn);">(수정)</span>' : '';
+      const pendingTag = t.pending ? ' <span class="task-tag" style="color:var(--warn);" title="점수 자동 보정 대기 중">⏳</span>' : '';
 
       // 타임스탬프 포맷
       let metaHtml = '';
@@ -1856,7 +1867,7 @@ function renderDetail(s) {
           return `<div class="task-row">
             <span class="task-dot ${dotClass}"></span>
             <span class="task-icon-btn" title="수동완료 취소" onclick="event.stopPropagation();undoManualDone('${escAttr(s.name)}','${escAttr(t.title)}','${t.timestamp||''}')">\u2705</span>
-            <span class="task-name">${esc(t.title)}${manualTag}${editedTag}</span>
+            <span class="task-name">${esc(t.title)}${manualTag}${editedTag}${pendingTag}</span>
             ${metaHtml}
           </div>`;
         } else {
@@ -1867,7 +1878,7 @@ function renderDetail(s) {
       return `<div class="task-row">
         <span class="task-dot ${dotClass}"></span>
         <span class="task-icon-btn" title="수동완료 취소" onclick="event.stopPropagation();undoManualDone('${escAttr(s.name)}','${escAttr(t.title)}','${t.timestamp||''}')">\u2705</span>
-        <span class="task-name">${esc(t.title)}${manualTag}${editedTag}</span>
+        <span class="task-name">${esc(t.title)}${manualTag}${editedTag}${pendingTag}</span>
         ${metaHtml}
         <span class="task-score-val ${scClass}" onclick="event.stopPropagation();showScoreEditModal('${escAttr(s.name)}','${escAttr(t.title)}',${t.score||0},${t.total||100},'${t.timestamp||''}')">${pctDisplay}</span>
       </div>`;

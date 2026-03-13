@@ -19,9 +19,6 @@ var SHEET_WEEKLY   = '주간과제';
 var CACHE_KEY      = 'dashboard_v8';
 var CACHE_TTL      = 300; // 5분 (초)
 
-// ---- 유틸리티 ----
-function safeStr(v) { return String(v != null ? v : '').trim(); }
-
 // ============================================================
 // 1. doGet — 대시보드 데이터 JSON 제공
 // ============================================================
@@ -41,7 +38,7 @@ function doGet(e) {
     var data = getDashboardData(requestedPeriod);
     return jsonResponse(data);
   } catch (err) {
-    return jsonResponse({ error: err.message, stack: err.stack });
+    return jsonResponse({ error: err.message });
   }
 }
 
@@ -256,9 +253,9 @@ function handleStatusChange(params) {
     return { error: 'studentName과 newStatus가 필요합니다.' };
   }
 
-  var validStatuses = ['출석', '결석', '귀가', '지각'];
+  var validStatuses = ['출석', '결석', '귀가', '지각', '추가문제'];
   if (validStatuses.indexOf(newStatus) === -1) {
-    return { error: '유효하지 않은 상태: ' + newStatus + ' (출석/결석/귀가/지각)' };
+    return { error: '유효하지 않은 상태: ' + newStatus + ' (출석/결석/귀가/지각/추가문제)' };
   }
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -267,7 +264,7 @@ function handleStatusChange(params) {
 
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    var name = safeStr(data[i][0]);
+    var name = String(data[i][0] != null ? data[i][0] : '').trim();
     if (name === studentName) {
       sheet.getRange(i + 1, 4).setValue(newStatus); // D열: 상태
       return { success: true, action: '상태변경', name: studentName, status: newStatus };
@@ -441,16 +438,16 @@ function getDashboardData(requestedPeriod) {
 
   for (var i = 1; i < tasksRaw.length; i++) {
     var row = tasksRaw[i];
-    var tSchool = safeStr(row[0]);
+    var tSchool = String(row[0] != null ? row[0] : '').trim();
     
-    var rawTGrade = safeStr(row[1]);
+    var rawTGrade = String(row[1] != null ? row[1] : '').trim();
     var tGrade = rawTGrade.replace(/[^0-9]/g, '');
     // If the spreadsheet actually contained no numbers, fallback to original to avoid empty string
     if (!tGrade) tGrade = rawTGrade;
     
-    var tTitle = safeStr(row[2]);
-    var tLink = safeStr(row[3]);
-    var tTargets = safeStr(row[5]);
+    var tTitle = String(row[2] != null ? row[2] : '').trim();
+    var tLink = String(row[3] != null ? row[3] : '').trim();
+    var tTargets = String(row[5] != null ? row[5] : '').trim();
 
     // B2 fix: 빈 퀴즈제목 건너뛰기
     if (!tTitle) continue;
@@ -484,7 +481,7 @@ function getDashboardData(requestedPeriod) {
   var validStudentNamesSet = {};
   for (var pi = 1; pi < studentsRaw.length; pi++) {
     var pRow = studentsRaw[pi];
-    var pName = safeStr(pRow[0]);
+    var pName = String(pRow[0] != null ? pRow[0] : '').trim();
     if (pName) validStudentNamesSet[pName] = true;
   }
 
@@ -496,14 +493,14 @@ function getDashboardData(requestedPeriod) {
   for (var si = 1; si < summaryRaw.length; si++) {
     var sRow = summaryRaw[si];
     var ts = sRow[0];
-    var sName = safeStr(sRow[1]);  // B1 fix
-    var sFormTitle = safeStr(sRow[2]);
+    var sName = String(sRow[1] != null ? sRow[1] : '').trim();  // B1 fix
+    var sFormTitle = String(sRow[2] != null ? sRow[2] : '').trim();
     var sScore = Number(sRow[3]) || 0;
     var sTotal = Number(sRow[4]) || 0;
     // B9 fix: total=0일 때 pct를 null로
     var sPct = sTotal > 0 ? (Number(sRow[5]) || Math.round(sScore / sTotal * 100)) : null;
-    var sPeriod = safeStr(sRow[6]);
-    var sEdited = safeStr(sRow[7]);
+    var sPeriod = String(sRow[6] != null ? sRow[6] : '').trim();
+    var sEdited = String(sRow[7] != null ? sRow[7] : '').trim();
 
     if (!sName || !sFormTitle) continue;
 
@@ -525,7 +522,8 @@ function getDashboardData(requestedPeriod) {
       total: sTotal,
       pct: sPct,
       edited: sEdited === '수정됨',
-      manual: sEdited === '수동'
+      manual: sEdited === '수동',
+      pending: sEdited === '점수대기'
     };
     var entryTime = ts instanceof Date ? ts.getTime() : new Date(ts).getTime();
 
@@ -567,14 +565,14 @@ function getDashboardData(requestedPeriod) {
 
   for (var pi = 1; pi < studentsRaw.length; pi++) {
     var pRow = studentsRaw[pi];
-    var pName = safeStr(pRow[0]);  // B1 fix
-    var pSchool = safeStr(pRow[1]);
+    var pName = String(pRow[0] != null ? pRow[0] : '').trim();  // B1 fix
+    var pSchool = String(pRow[1] != null ? pRow[1] : '').trim();
     
-    var rawGrade = safeStr(pRow[2]);
+    var rawGrade = String(pRow[2] != null ? pRow[2] : '').trim();
     var pGrade = rawGrade.replace(/[^0-9]/g, '');
     if (!pGrade) pGrade = rawGrade;
     
-    var pStatus = safeStr(pRow[3]) || '출석';
+    var pStatus = String(pRow[3] != null ? pRow[3] : '').trim() || '출석';
     if (!pName) continue;
 
     // 학교/학년 목록 수집
@@ -637,6 +635,7 @@ function getDashboardData(requestedPeriod) {
           pct: lt.pct,
           edited: lt.edited || false,
           manual: lt.manual || false,
+          pending: lt.pending || false,
           attempts: subData.history.length,
           history: subData.history.map(function(h) {
             return {
@@ -645,7 +644,8 @@ function getDashboardData(requestedPeriod) {
               total: h.total,
               pct: h.pct,
               edited: h.edited,
-              manual: h.manual
+              manual: h.manual,
+              pending: h.pending || false
             };
           })
         });
@@ -725,6 +725,7 @@ function getDashboardData(requestedPeriod) {
     noTasks: 0,
     avgScore: 0,
     above90: 0,
+    below70: 0,
     absent: 0,
     dismissed: 0,
     late: 0
@@ -751,6 +752,7 @@ function getDashboardData(requestedPeriod) {
     if (st.doneCount > 0) {
       scoredStudents.push(st.avgPct);
       if (st.avgPct >= 90) stats.above90++;
+      if (st.avgPct < 70) stats.below70++;
     }
   }
 
@@ -827,7 +829,7 @@ function onFormSubmitHandler(e) {
     var total = 0;
 
     for (var c = 0; c < headers.length; c++) {
-      var h = safeStr(headers[c]).toLowerCase();  // B10 fix: null 체크 + trim
+      var h = String(headers[c] != null ? headers[c] : '').trim().toLowerCase();  // B10 fix: null 체크 + trim
 
       // 이름 컬럼
       if (h === '이름' || h === 'name' || h === '성명') {
@@ -854,7 +856,7 @@ function onFormSubmitHandler(e) {
     // 이름을 못 찾았으면 타임스탬프/점수 아닌 첫 번째 컬럼 시도
     if (!studentName) {
       for (var c2 = 0; c2 < headers.length; c2++) {
-        var h2 = safeStr(headers[c2]).toLowerCase();
+        var h2 = String(headers[c2] != null ? headers[c2] : '').trim().toLowerCase();
         if (h2 !== 'timestamp' && h2 !== '타임스탬프' && h2 !== '점수' && h2 !== 'score'
             && h2 !== '이메일' && h2 !== 'email address' && h2 !== '이메일 주소') {
           if (values[c2] != null) {
@@ -879,8 +881,8 @@ function onFormSubmitHandler(e) {
     var now = new Date();
     for (var di = summaryData.length - 1; di >= Math.max(1, summaryData.length - 10); di--) {
       var dRow = summaryData[di];
-      var dName = safeStr(dRow[1]);
-      var dTitle = safeStr(dRow[2]);
+      var dName = String(dRow[1] != null ? dRow[1] : '').trim();
+      var dTitle = String(dRow[2] != null ? dRow[2] : '').trim();
       var dTime = dRow[0] instanceof Date ? dRow[0] : new Date(dRow[0]);
       if (dName === studentName && (now.getTime() - dTime.getTime()) < 5000) {
         // 같은 시트이름 기반 매칭도 확인
@@ -916,7 +918,7 @@ function onFormSubmitHandler(e) {
       if (actualFormTitle) {
         var formTitleNorm = actualFormTitle.toLowerCase().replace(/\s+/g, '');
         for (var ti = 1; ti < tasksData.length; ti++) {
-          var taskTitle = safeStr(tasksData[ti][2]);
+          var taskTitle = String(tasksData[ti][2] != null ? tasksData[ti][2] : '').trim();
           if (!taskTitle) continue;
           var taskNorm = taskTitle.toLowerCase().replace(/\s+/g, '');
           if (formTitleNorm === taskNorm || formTitleNorm.indexOf(taskNorm) !== -1 || taskNorm.indexOf(formTitleNorm) !== -1) {
@@ -935,7 +937,7 @@ function onFormSubmitHandler(e) {
       if (!actualFormTitle) {
         var sheetNameNorm = sheetName.trim().toLowerCase().replace(/\s+/g, '');
         for (var ti = 1; ti < tasksData.length; ti++) {
-          var taskTitle = safeStr(tasksData[ti][2]);
+          var taskTitle = String(tasksData[ti][2] != null ? tasksData[ti][2] : '').trim();
           if (!taskTitle) continue;
           var taskNorm = taskTitle.toLowerCase().replace(/\s+/g, '');
           if (sheetNameNorm === taskNorm || sheetNameNorm.indexOf(taskNorm) !== -1 || taskNorm.indexOf(sheetNameNorm) !== -1) {
@@ -956,7 +958,7 @@ function onFormSubmitHandler(e) {
       Utilities.sleep(2000);
       values = responseSheet.getRange(responseRow, 1, 1, lastCol).getValues()[0];
       for (var c3 = 0; c3 < headers.length; c3++) {
-        var h3 = safeStr(headers[c3]).toLowerCase();
+        var h3 = String(headers[c3] != null ? headers[c3] : '').trim().toLowerCase();
         if (h3 === '점수' || h3 === 'score' || h3 === '총점') {
           var scoreStr3 = String(values[c3] != null ? values[c3] : '');
           if (scoreStr3.indexOf('/') !== -1) {
@@ -1022,7 +1024,7 @@ function onFormSubmitHandler(e) {
       total,            // E: 만점
       pct,              // F: 정답률
       periodName,       // G: 기간명
-      ''                // H: 수정여부 (자동채점이므로 비움)
+      total === 0 ? '점수대기' : ''  // H: 수정여부 (점수 미확인 시 보정 대기)
     ]);
 
     // 캐시 무효화
@@ -1042,11 +1044,11 @@ function onFormSubmitHandler(e) {
 function registerAllTriggers() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // 기존 onFormSubmit 트리거 모두 삭제
+  // 기존 트리거 모두 삭제 (onFormSubmit + fixMissingScores)
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === 'onFormSubmitHandler'
-        && triggers[i].getEventType() === ScriptApp.EventType.ON_FORM_SUBMIT) {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === 'onFormSubmitHandler' || fn === 'fixMissingScores') {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
@@ -1057,12 +1059,106 @@ function registerAllTriggers() {
     .onFormSubmit()
     .create();
 
-  Logger.log('트리거 등록 완료: onFormSubmitHandler (스프레드시트 레벨)');
-  SpreadsheetApp.getUi().alert(
-    '트리거가 등록되었습니다.\n' +
-    '이 스프레드시트에 연결된 모든 구글폼의 제출이\n' +
-    '자동으로 Summary에 기록됩니다.'
-  );
+  // 점수 보정 트리거 — 5분마다
+  ScriptApp.newTrigger('fixMissingScores')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+
+  Logger.log('트리거 등록 완료: onFormSubmitHandler + fixMissingScores');
+  try {
+    SpreadsheetApp.getUi().alert(
+      '트리거가 등록되었습니다.\n' +
+      '이 스프레드시트에 연결된 모든 구글폼의 제출이\n' +
+      '자동으로 Summary에 기록됩니다.\n' +
+      '(점수 미확인 건은 2분 이내 자동 보정)'
+    );
+  } catch (_) { /* 스크립트 에디터에서 실행 시 UI 없음 — 무시 */ }
+}
+
+// ============================================================
+// 5-1. fixMissingScores — 점수대기 행 자동 보정 (2분마다 실행)
+// ============================================================
+function fixMissingScores() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_SUMMARY);
+  if (!sheet) return;
+
+  var data = sheet.getDataRange().getValues();
+
+  // 할일배정에서 퀴즈제목 → 폼URL 맵 구성
+  var formMap = {};
+  var tasksSheet = ss.getSheetByName(SHEET_TASKS);
+  if (tasksSheet) {
+    var tasksData = tasksSheet.getDataRange().getValues();
+    for (var i = 1; i < tasksData.length; i++) {
+      var title = String(tasksData[i][2] || '').trim();
+      var link  = String(tasksData[i][3] || '').trim();
+      if (title && link && !formMap[title]) formMap[title] = link;
+    }
+  }
+
+  var fixed = 0;
+  for (var r = data.length - 1; r >= 1; r--) {
+    if (String(data[r][7] || '').trim() !== '점수대기') continue;
+
+    var studentName = String(data[r][1] || '').trim();
+    var quizTitle   = String(data[r][2] || '').trim();
+    var formUrl     = formMap[quizTitle];
+    if (!formUrl) continue;
+
+    try {
+      var form = FormApp.openByUrl(formUrl);
+      if (!form.isQuiz()) continue;
+
+      var responses = form.getResponses();
+      for (var ri = responses.length - 1; ri >= 0; ri--) {
+        var resp = responses[ri];
+        // 응답에서 이름 확인
+        var items = resp.getItemResponses();
+        var respName = '';
+        for (var ii = 0; ii < items.length; ii++) {
+          var itemTitle = items[ii].getItem().getTitle().toLowerCase().trim();
+          if (itemTitle === '이름' || itemTitle === 'name' || itemTitle === '성명') {
+            respName = String(items[ii].getResponse()).trim();
+            break;
+          }
+        }
+        if (respName !== studentName) continue;
+
+        // 점수 계산
+        var gradable = resp.getGradableItemResponses();
+        var calcScore = 0, calcTotal = 0;
+        for (var gi = 0; gi < gradable.length; gi++) {
+          calcScore += gradable[gi].getScore();
+          try {
+            var origItem = gradable[gi].getItem();
+            var iType = origItem.getType();
+            if      (iType === FormApp.ItemType.MULTIPLE_CHOICE) calcTotal += origItem.asMultipleChoiceItem().getPoints();
+            else if (iType === FormApp.ItemType.CHECKBOX)        calcTotal += origItem.asCheckboxItem().getPoints();
+            else if (iType === FormApp.ItemType.LIST)            calcTotal += origItem.asListItem().getPoints();
+            else if (iType === FormApp.ItemType.TEXT)            calcTotal += origItem.asTextItem().getPoints();
+          } catch (_) {}
+        }
+
+        if (calcTotal > 0) {
+          var newPct = Math.round(calcScore / calcTotal * 100);
+          sheet.getRange(r + 1, 4).setValue(calcScore);
+          sheet.getRange(r + 1, 5).setValue(calcTotal);
+          sheet.getRange(r + 1, 6).setValue(newPct);
+          sheet.getRange(r + 1, 8).setValue('');
+          fixed++;
+          Logger.log('점수 보정: ' + studentName + ' / ' + quizTitle + ' = ' + calcScore + '/' + calcTotal);
+          break;
+        }
+      }
+    } catch (e) {
+      Logger.log('fixMissingScores 오류: ' + quizTitle + ' — ' + e.message);
+    }
+  }
+
+  if (fixed > 0) invalidateCache();
+  Logger.log('fixMissingScores 완료: ' + fixed + '개 보정');
 }
 
 // ============================================================
@@ -1237,12 +1333,12 @@ function getStudentsForTask(ss, taskTitle) {
   var seen = {};
 
   for (var i = 1; i < tasksData.length; i++) {
-    var tTitle = safeStr(tasksData[i][2]);
+    var tTitle = String(tasksData[i][2] != null ? tasksData[i][2] : '').trim();
     if (tTitle !== taskTitle) continue;
 
-    var tSchool = safeStr(tasksData[i][0]);
-    var tGrade = safeStr(tasksData[i][1]);
-    var tTargets = safeStr(tasksData[i][5]);
+    var tSchool = String(tasksData[i][0] != null ? tasksData[i][0] : '').trim();
+    var tGrade = String(tasksData[i][1] != null ? tasksData[i][1] : '').trim();
+    var tTargets = String(tasksData[i][5] != null ? tasksData[i][5] : '').trim();
 
     if (tTargets) {
       // 개별 학생 지정
@@ -1254,9 +1350,9 @@ function getStudentsForTask(ss, taskTitle) {
     } else if (tSchool) {
       // 학교+학년 기반
       for (var j = 1; j < studentsData.length; j++) {
-        var sName = safeStr(studentsData[j][0]);
-        var sSchool = safeStr(studentsData[j][1]);
-        var sGrade = safeStr(studentsData[j][2]);
+        var sName = String(studentsData[j][0] != null ? studentsData[j][0] : '').trim();
+        var sSchool = String(studentsData[j][1] != null ? studentsData[j][1] : '').trim();
+        var sGrade = String(studentsData[j][2] != null ? studentsData[j][2] : '').trim();
         if (sSchool === tSchool && sGrade === tGrade && sName && !seen[sName]) {
           targetStudents.push(sName);
           seen[sName] = true;
@@ -1275,9 +1371,9 @@ function getExistingSubmissions(ss, taskTitle, periodName) {
   var data = sheet.getDataRange().getValues();
   var map = {};
   for (var i = 1; i < data.length; i++) {
-    var name = safeStr(data[i][1]);
-    var title = safeStr(data[i][2]);
-    var period = safeStr(data[i][6]);
+    var name = String(data[i][1] != null ? data[i][1] : '').trim();
+    var title = String(data[i][2] != null ? data[i][2] : '').trim();
+    var period = String(data[i][6] != null ? data[i][6] : '').trim();
     if (title === taskTitle && (!periodName || !period || period === periodName)) {
       map[name] = true;
     }
@@ -1302,12 +1398,16 @@ function invalidateCache() {
   
   removeChunks(CACHE_KEY);
   
-  // 기간별 캐시 제거
+  // 모든 기간 캐시 제거
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var periodName = getActivePeriodName(ss);
-    if (periodName) {
-      removeChunks(CACHE_KEY + '_' + periodName);
+    var sheet = ss.getSheetByName(SHEET_PERIODS);
+    if (sheet) {
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var name = String(data[i][0] || '').trim();
+        if (name) removeChunks(CACHE_KEY + '_' + name);
+      }
     }
   } catch (_) { /* 무시 */ }
 }
