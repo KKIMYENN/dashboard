@@ -1652,10 +1652,10 @@ function handleTaskAdd(params) {
     var tGrade  = String(params.grade || '').trim().replace(/[^0-9]/g, '');
     sheet.appendRow([tSchool, tGrade, tTitle, tLink, '', '', tFormat, tWeekNum, tItems]);
 
-  } else if (assignType === 'schools') {
-    // 학교 다중선택: A열에 쉼표 구분 학교 목록 (빈 값 = 전체)
-    var tSchools = (params.schools || '').trim();
-    if (!tWeekNum) return { error: 'schools 배정은 주차(weekNum)가 필요합니다.' };
+  } else if (assignType === 'schools' || assignType === 'all') {
+    // 학교 다중선택 or 전체: A열에 쉼표 구분 학교 목록 (빈 값 = 전체)
+    var tSchools = assignType === 'all' ? '' : (params.schools || '').trim();
+    if (!tWeekNum) return { error: '주차(weekNum)가 필요합니다.' };
     sheet.appendRow([tSchools, '', tTitle, tLink, '', '', tFormat, tWeekNum, tItems]);
 
   } else if (assignType === 'textbook') {

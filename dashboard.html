@@ -2215,6 +2215,7 @@ async function deleteTask(title, school, grade) {
 // ══════════════════════════════════════════
 function showTaskMgmtModal(tab, preWeekNum) {
   tab = tab || 'add';
+  if (!preWeekNum) preWeekNum = currentWeek;
   const schools   = getAvailableSchools();
   const allGrades = dashboardData ? (dashboardData.grades || []) : ['1','2','3'];
   const container = document.getElementById('modalContainer');
@@ -2327,6 +2328,18 @@ function showTaskMgmtModal(tab, preWeekNum) {
             <select id="ta-grade" style="width:100%;margin-bottom:8px">
               <option value="">-- 학년 선택 (비우면 전학년) --</option>${gradeOptions}
             </select>
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+              <div>
+                <label>주차 <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시, 선택)</span></label>
+                <input id="ta-school-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;display:block">
+              </div>
+              <div>
+                <label>날짜 <span style="font-size:11px;color:var(--text-3)">(선택)</span></label>
+                <input id="ta-school-date" type="date" style="width:160px;display:block">
+              </div>
+            </div>
+            <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
+            <input id="ta-school-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
           </div>
 
           <!-- 학교 다중선택 -->
@@ -2352,6 +2365,22 @@ function showTaskMgmtModal(tab, preWeekNum) {
             <input id="ta-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
           </div>
 
+          <!-- 전체 -->
+          <div id="ta-all-fields" style="display:none">
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+              <div>
+                <label>주차 <span style="color:var(--fail)">*</span> <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시)</span></label>
+                <input id="ta-all-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;display:block">
+              </div>
+              <div>
+                <label>날짜 <span style="font-size:11px;color:var(--text-3)">(선택)</span></label>
+                <input id="ta-all-date" type="date" style="width:160px;display:block">
+              </div>
+            </div>
+            <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
+            <input id="ta-all-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
+          </div>
+
           <!-- 교과서 -->
           <div id="ta-textbook-fields" style="display:none">
             <label>교과서명 <span style="color:var(--fail)">*</span></label>
@@ -2374,8 +2403,20 @@ function showTaskMgmtModal(tab, preWeekNum) {
 
           <!-- 개별학생 -->
           <div id="ta-students-fields" style="display:none">
-            <label>대상 학생 <span style="font-size:11px;color:var(--text-3)">(쉼표로 구분)</span></label>
-            <input id="ta-students" type="text" placeholder="예: 김영희, 이철수">
+            <label>대상 학생 <span style="color:var(--fail)">*</span> <span style="font-size:11px;color:var(--text-3)">(쉼표로 구분)</span></label>
+            <input id="ta-students" type="text" placeholder="예: 김영희, 이철수" style="margin-bottom:8px">
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+              <div>
+                <label>주차 <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시, 선택)</span></label>
+                <input id="ta-students-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;display:block">
+              </div>
+              <div>
+                <label>날짜 <span style="font-size:11px;color:var(--text-3)">(선택)</span></label>
+                <input id="ta-students-date" type="date" style="width:160px;display:block">
+              </div>
+            </div>
+            <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
+            <input id="ta-students-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
           </div>
 
           <div class="modal-btns">
@@ -2408,6 +2449,7 @@ function switchTaskTab(tab) {
 function onTaskTypeChange(type) {
   document.getElementById('ta-school-fields').style.display   = type === 'school'   ? '' : 'none';
   document.getElementById('ta-schools-fields').style.display  = type === 'schools'  ? '' : 'none';
+  document.getElementById('ta-all-fields').style.display      = type === 'all'      ? '' : 'none';
   document.getElementById('ta-textbook-fields').style.display = type === 'textbook' ? '' : 'none';
   document.getElementById('ta-students-fields').style.display = type === 'students' ? '' : 'none';
 }
@@ -2624,8 +2666,11 @@ async function submitTaskAdd() {
   let school = '', grade = '', textbook = '', students = '', weekNum = '', schools = '', items = '', date = '';
 
   if (type === 'school') {
-    school = document.getElementById('ta-school').value.trim();
-    grade  = document.getElementById('ta-grade').value.trim();
+    school  = document.getElementById('ta-school').value.trim();
+    grade   = document.getElementById('ta-grade').value.trim();
+    weekNum = document.getElementById('ta-school-weeknum').value.trim();
+    date    = document.getElementById('ta-school-date').value;
+    items   = document.getElementById('ta-school-items').value.trim();
   } else if (type === 'schools') {
     const checked = [...document.querySelectorAll('.school-cb:checked')].map(cb => cb.value);
     weekNum = document.getElementById('ta-weeknum').value.trim();
@@ -2634,6 +2679,11 @@ async function submitTaskAdd() {
     schools = checked.length === allSchools.length ? '' : checked.join(',');
     items   = document.getElementById('ta-items').value.trim();
     date    = document.getElementById('ta-date').value;
+  } else if (type === 'all') {
+    weekNum = document.getElementById('ta-all-weeknum').value.trim();
+    if (!weekNum) { alert('주차를 입력해주세요.'); return; }
+    date    = document.getElementById('ta-all-date').value;
+    items   = document.getElementById('ta-all-items').value.trim();
   } else if (type === 'textbook') {
     textbook = document.getElementById('ta-textbook').value.trim();
     if (!textbook) { alert('교과서를 선택해주세요.'); return; }
@@ -2644,6 +2694,9 @@ async function submitTaskAdd() {
   } else if (type === 'students') {
     students = document.getElementById('ta-students').value.trim();
     if (!students) { alert('대상 학생을 입력해주세요.'); return; }
+    weekNum = document.getElementById('ta-students-weeknum').value.trim();
+    date    = document.getElementById('ta-students-date').value;
+    items   = document.getElementById('ta-students-items').value.trim();
   }
 
   if (demoMode) {
