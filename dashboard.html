@@ -188,6 +188,29 @@ body {
   font-weight: 700;
   color: var(--text-1);
   margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wt-view-toggle {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.wt-view-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.wt-view-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 .wt-grid {
   display: flex;
@@ -205,6 +228,9 @@ body {
 .wt-schools {
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--accent);
   margin-bottom: 6px;
 }
@@ -226,7 +252,7 @@ body {
   color: var(--text-3);
 }
 /* ── 과제 카드 배지 ── */
-.wt-badge { font-size:11px; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:600; vertical-align:middle; }
+.wt-badge { font-size:11px; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:600; vertical-align:middle; white-space:nowrap; flex-shrink:0; }
 .wt-badge-link { background:#DBEAFE; color:#1D4ED8; }
 .wt-badge-print { background:#FEF3C7; color:#92400E; }
 .wt-badge-self { background:#D1FAE5; color:#065F46; }
@@ -239,6 +265,12 @@ body {
 .wt-group { position:relative; }
 .wt-label a { color:var(--text-1); text-decoration:none; }
 .wt-label a:hover { text-decoration:underline; color:var(--accent); }
+/* ── 과제 카드 하이라이트 ── */
+@keyframes wt-highlight { 0%,10% { background:var(--accent-bg,#DBEAFE); box-shadow:0 0 0 2px var(--accent,#3b82f6); } 100% { background:var(--bg); box-shadow:none; } }
+.wt-group-highlight { animation: wt-highlight 1.8s ease-out forwards; }
+/* ── 학생 카드 과제명 클릭 ── */
+.task-name-link { cursor:pointer; }
+.task-name-link:hover { text-decoration:underline; color:var(--accent); }
 /* ── 모달 내 학교 선택 ── */
 .school-picker { display:flex; flex-wrap:wrap; gap:6px 12px; margin:8px 0; }
 .school-picker label { font-size:13px; display:flex; align-items:center; gap:4px; cursor:pointer; }
@@ -350,10 +382,12 @@ body {
   opacity: .5;
 }
 .cal-day.today {
-  color: #fff !important;
   font-weight: 700;
 }
-.cal-day.today::before {
+.cal-day.selected {
+  color: #fff !important;
+}
+.cal-day.selected::before {
   content: '';
   position: absolute;
   top: 50%;
@@ -384,6 +418,8 @@ body {
   border-radius: 4px;
   padding: 1px 5px;
   margin-left: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .cal-week-label {
   font-size: 11px;
@@ -907,6 +943,9 @@ select.filter-sel {
     <select class="filter-sel" id="gradeFilter" onchange="renderStudents()">
       <option value="">전체 학년</option>
     </select>
+    <select class="filter-sel" id="textbookFilter" onchange="renderStudents()">
+      <option value="">전체 교과서</option>
+    </select>
     <select class="filter-sel" id="sortFilter" onchange="setSort(this.value)">
       <option value="name">정렬: 이름순</option>
       <option value="incomplete">정렬: 미완료 우선</option>
@@ -914,7 +953,6 @@ select.filter-sel {
     </select>
     <input class="search-input" id="searchBox" type="text" placeholder="이름 검색..." oninput="renderStudents()">
     <button class="copy-btn" id="copyBtn" onclick="copyIncompleteLinks()">미완료 링크 복사</button>
-    <button class="copy-btn" id="addTaskBtn" onclick="showTaskMgmtModal('add')" style="background:var(--pass,#22c55e);color:#fff;border-color:transparent;">📋 과제 관리</button>
   </div>
 
   <!-- Card Grid -->
@@ -946,6 +984,9 @@ let currentWeek = 1; // 주차 (1~7)
 const TOTAL_WEEKS = 7;
 const PROGRAM_START_DATE = new Date(2026, 2, 9); // 2026-03-09 (월요일) — 프로그램 시작일
 let calendarMonth = new Date(PROGRAM_START_DATE); // 캘린더에 표시할 월
+let selectedDate = null; // 선택된 날짜 (YYYY-MM-DD), 기본값은 오늘
+let taskView = 'week'; // 'week' | 'day'
+let taskMgmtSelected = new Set(); // bulk-delete selection in task mgmt modal
 
 // ══════════════════════════════════════════
 //  Demo Data (주차별 + 과제 3~4개 + 기준 미달)
@@ -1058,6 +1099,14 @@ const DEMO_PROFILES = [
   { name:'오하은', school:'금성고', grade:'1', status:'귀가' },
   { name:'임채원', school:'유성고', grade:'1', status:'출석' },
   { name:'송지호', school:'둔산여고', grade:'1', status:'출석' },
+];
+
+// 데모용 교과서 목록 (Code.gs TEXTBOOK_MAP 대표 값)
+const DEMO_TEXTBOOKS = [
+  '공통영어1 YBM김','공통영어1 YBM박','공통영어1 능률민','공통영어1 능률오',
+  '공통영어1 미래엔김','공통영어1 비상홍','공통영어1 천재강','공통영어1 천재조',
+  'YBM 박 영어1','능률오 영어1','미래엔김 영어1','비상홍 영어1',
+  '지학사신 영어1','천재조 영어1','원서'
 ];
 
 // seeded random for consistent demo scores
@@ -1374,6 +1423,22 @@ async function postAction(body) {
   }
 }
 
+async function resetTasksDB() {
+  if (demoMode) {
+    dashboardData.taskAssignments = [];
+    weeklySchoolTasks = {};
+    renderAll();
+    showToast('과제 데이터가 초기화되었습니다 (데모)');
+    return;
+  }
+  if (!confirm('할일배정 및 주간과제 데이터를 모두 삭제합니다. 계속하시겠습니까?')) return;
+  const result = await postAction({ action: '할일초기화' });
+  if (result) {
+    showToast('DB 초기화 완료');
+    fetchData();
+  }
+}
+
 // ══════════════════════════════════════════
 //  Weekly Task Modal & CRUD
 // ══════════════════════════════════════════
@@ -1397,10 +1462,14 @@ async function deleteWeeklyTask(weekNum, label) {
 
   if (demoMode) {
     if (dashboardData.taskAssignments) {
-      const idx = dashboardData.taskAssignments.findIndex(a => a.title === label && a.weekNum == weekNum);
-      if (idx >= 0) dashboardData.taskAssignments.splice(idx, 1);
+      dashboardData.taskAssignments = dashboardData.taskAssignments.filter(
+        a => !(a.title === label && a.weekNum == weekNum)
+      );
     }
     weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+    const savedAssignments = dashboardData.taskAssignments;
+    dashboardData = getDemoData(currentWeek);
+    dashboardData.taskAssignments = savedAssignments;
     renderAll();
     showToast('과제가 삭제되었습니다. (데모)');
   } else {
@@ -1445,13 +1514,31 @@ function setCalMonth(delta) {
   renderCalendar();
 }
 
-function renderWeekTasksHtml(weekNum) {
-  const groups = weeklySchoolTasks[weekNum];
+function wtViewToggleHtml(weekNum) {
+  const wActive = taskView === 'week' ? ' active' : '';
+  const dActive = taskView === 'day' ? ' active' : '';
+  return `<div class="wt-view-toggle">
+    <button class="wt-view-btn${wActive}" onclick="setTaskView('week',${weekNum})">주차별</button>
+    <button class="wt-view-btn${dActive}" onclick="setTaskView('day',${weekNum})">일별</button>
+  </div>`;
+}
+
+function setTaskView(v, weekNum) {
+  taskView = v;
+  renderCalendar();
+}
+
+function renderDayTasksHtml(dateStr, weekNum) {
+  const allGroups = weeklySchoolTasks[weekNum] || [];
+  // 날짜 미지정 과제는 해당 주 모든 날에 표시, 날짜 지정 과제는 해당 날에만 표시
+  const groups = allGroups.filter(g => !g.date || g.date === dateStr);
   const addBtn = `<span class="wt-add-btn" onclick="showTaskMgmtModal('add', ${weekNum})" title="과제 추가">➕</span>`;
-  if (!groups || groups.length === 0) {
-    return `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${weekNum}주차 과제 ${addBtn}</div><div style="font-size:13px;color:var(--text-3)">이 주차에 배정된 과제가 없습니다.</div></div>`;
+  const mm = dateStr.slice(5).replace('-', '/');
+  const toggle = wtViewToggleHtml(weekNum);
+  if (groups.length === 0) {
+    return `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${mm} 과제 ${addBtn}${toggle}</div><div style="font-size:13px;color:var(--text-3)">이 날짜에 배정된 과제가 없습니다.</div></div>`;
   }
-  let html = `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${weekNum}주차 과제 ${addBtn}</div><div class="wt-grid">`;
+  let html = `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${mm} 과제 ${addBtn}${toggle}</div><div class="wt-grid">`;
   groups.forEach(g => {
     const fmt = g.format || '프린트';
     const badgeCls = fmt === '링크' ? 'wt-badge-link' : 'wt-badge-print';
@@ -1459,7 +1546,7 @@ function renderWeekTasksHtml(weekNum) {
     const labelHtml = (fmt === '링크' && g.link) ? `<a href="${g.link}" target="_blank">${g.label}</a>` : g.label;
     const safeLabel = g.label.replace(/'/g, "\\'");
     const dateBadge = g.date ? `<span class="wt-date-badge">📅 ${g.date.slice(5).replace('-','/')}</span>` : '';
-    html += `<div class="wt-group">`;
+    html += `<div class="wt-group" data-task-label="${escAttr(g.label)}">`;
     html += `<span class="wt-del-btn" onclick="deleteWeeklyTask(${weekNum},'${safeLabel}')" title="삭제">✕</span>`;
     html += `<div class="wt-schools">${g.schools.join(', ')} <span class="wt-badge ${badgeCls}">${badgeLabel}</span>${dateBadge}</div>`;
     html += `<div class="wt-label">${labelHtml}</div>`;
@@ -1474,6 +1561,45 @@ function renderWeekTasksHtml(weekNum) {
   return html;
 }
 
+function renderWeekTasksHtml(weekNum) {
+  const groups = weeklySchoolTasks[weekNum];
+  const addBtn = `<span class="wt-add-btn" onclick="showTaskMgmtModal('add', ${weekNum})" title="과제 추가">➕</span>`;
+  const toggle = wtViewToggleHtml(weekNum);
+  if (!groups || groups.length === 0) {
+    return `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${weekNum}주차 과제 ${addBtn}${toggle}</div><div style="font-size:13px;color:var(--text-3)">이 주차에 배정된 과제가 없습니다.</div></div>`;
+  }
+  let html = `<div class="week-tasks-card"><div class="week-tasks-title">📋 ${weekNum}주차 과제 ${addBtn}${toggle}</div><div class="wt-grid">`;
+  groups.forEach(g => {
+    const fmt = g.format || '프린트';
+    const badgeCls = fmt === '링크' ? 'wt-badge-link' : 'wt-badge-print';
+    const badgeLabel = fmt === '링크' ? '🔗 링크' : '🖨 프린트';
+    const labelHtml = (fmt === '링크' && g.link) ? `<a href="${g.link}" target="_blank">${g.label}</a>` : g.label;
+    const safeLabel = g.label.replace(/'/g, "\\'");
+    const dateBadge = g.date ? `<span class="wt-date-badge">📅 ${g.date.slice(5).replace('-','/')}</span>` : '';
+    html += `<div class="wt-group" data-task-label="${escAttr(g.label)}">`;
+    html += `<span class="wt-del-btn" onclick="deleteWeeklyTask(${weekNum},'${safeLabel}')" title="삭제">✕</span>`;
+    html += `<div class="wt-schools">${g.schools.join(', ')} <span class="wt-badge ${badgeCls}">${badgeLabel}</span>${dateBadge}</div>`;
+    html += `<div class="wt-label">${labelHtml}</div>`;
+    if (g.items && g.items.length > 0) {
+      html += `<div class="wt-items">`;
+      g.items.forEach(item => { html += `<span class="wt-item">${item}</span>`; });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+  html += `</div></div>`;
+  return html;
+}
+
+function selectDay(dateStr, weekNum) {
+  selectedDate = dateStr;
+  if (weekNum && weekNum >= 1 && weekNum <= TOTAL_WEEKS && weekNum !== currentWeek) {
+    setWeek(weekNum);
+  } else {
+    renderCalendar();
+  }
+}
+
 function renderCalendar() {
   const bar = document.getElementById('weekBar');
   bar.style.display = 'flex';
@@ -1482,6 +1608,7 @@ function renderCalendar() {
   const month = calendarMonth.getMonth(); // 0-based
   const today = new Date();
   today.setHours(0,0,0,0);
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
   // 이 달의 첫 날 & 마지막 날
   const firstDay = new Date(year, month, 1);
@@ -1502,7 +1629,6 @@ function renderCalendar() {
   let html = `<div class="dash-calendar">`;
   // Header
   html += `<div class="cal-header">
-    <span class="cal-title">📅 주차 선택</span>
     <div class="cal-nav">
       <button class="cal-nav-btn" onclick="setCalMonth(-1)">◀</button>
       <span class="cal-month">${year}년 ${monthNames[month]}</span>
@@ -1542,25 +1668,24 @@ function renderCalendar() {
       const dd = String(day.getDate()).padStart(2,'0');
       const dateStr = `${day.getFullYear()}-${mm}-${dd}`;
       const hasTask = taskDateSet.has(dateStr);
-      const dayClass = [(isOtherMonth ? 'other-month' : ''), (isToday ? 'today' : ''), (hasTask ? 'has-task' : '')].filter(Boolean).join(' ');
-      html += `<span class="cal-day ${dayClass}">${day.getDate()}</span>`;
+      const isSelected = dateStr === (selectedDate || todayStr);
+      const dayClass = [(isOtherMonth ? 'other-month' : ''), (isToday ? 'today' : ''), (hasTask ? 'has-task' : ''), (isSelected ? 'selected' : '')].filter(Boolean).join(' ');
+      html += `<span class="cal-day ${dayClass}" onclick="event.stopPropagation(); selectDay('${dateStr}', ${isValidWeek ? weekNum : 0})">${day.getDate()}</span>`;
     }
     // 주차 라벨
-    if (isValidWeek) {
-      const taskCount = (WEEKLY_TASKS[weekNum] || []).length;
-      const schoolTaskCount = (weeklySchoolTasks[weekNum] || []).length;
-      const totalLabel = schoolTaskCount > 0 ? `${taskCount}+${schoolTaskCount}` : `${taskCount}`;
-      html += `<span class="cal-week-label">${weekNum}주차(${totalLabel})</span>`;
-    } else {
-      html += `<span class="cal-week-label"></span>`;
-    }
+    html += `<span class="cal-week-label">${isValidWeek ? weekNum + '주차' : ''}</span>`;
     html += `</div>`;
 
     cursor.setDate(cursor.getDate() + 7);
   }
   html += `</div></div>`;
 
-  html += renderWeekTasksHtml(currentWeek);
+  if (taskView === 'day') {
+    const ds = selectedDate || todayStr;
+    html += renderDayTasksHtml(ds, currentWeek);
+  } else {
+    html += renderWeekTasksHtml(currentWeek);
+  }
   bar.innerHTML = html;
 }
 
@@ -1681,14 +1806,19 @@ function renderProgress() {
 function renderFilters() {
   const schools = dashboardData.schools || [];
   const grades = dashboardData.grades || [];
+  const textbooks = [...new Set((dashboardData.students || []).map(s => s.textbook).filter(Boolean))].sort();
   const sf = document.getElementById('schoolFilter');
   const gf = document.getElementById('gradeFilter');
+  const tf = document.getElementById('textbookFilter');
   const curSchool = sf.value;
   const curGrade = gf.value;
+  const curTextbook = tf.value;
   sf.innerHTML = '<option value="">전체 학교</option>' + schools.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
   gf.innerHTML = '<option value="">전체 학년</option>' + grades.map(g => `<option value="${esc(g)}">${esc(g)}학년</option>`).join('');
+  tf.innerHTML = '<option value="">전체 교과서</option>' + textbooks.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
   if (curSchool) sf.value = curSchool;
   if (curGrade) gf.value = curGrade;
+  if (curTextbook) tf.value = curTextbook;
 }
 
 function renderUnmatched() {
@@ -1782,12 +1912,12 @@ function renderDetail(s) {
     if (s.status === '결석') {
       return `<div class="task-row">
         <span class="task-dot dot-absent"></span>
-        <span class="task-name" style="color:var(--text-3);">${esc(t.title)}</span>
+        <span class="task-name task-name-link" style="color:var(--text-3);" onclick="event.stopPropagation();jumpToTaskCard('${escAttr(t.title)}')">${esc(t.title)}</span>
         <span style="font-size:12px;color:var(--text-3);">-</span>
       </div>`;
     }
     if (t.done) {
-      const pctDisplay = t.pct !== null && t.pct !== undefined ? t.pct + '%' : (t.score + '/' + t.total);
+      const pctDisplay = t.pct !== null && t.pct !== undefined ? t.pct + '%' : '완료';
       const scClass = t.pct !== null ? scoreColorClass(t.pct) : '';
       const manualTag  = t.manual  ? ' <span class="task-tag">(수동)</span>' : '';
       const editedTag  = t.edited  ? ' <span class="task-tag" style="color:var(--warn);">(수정)</span>' : '';
@@ -1813,7 +1943,7 @@ function renderDetail(s) {
           return `<div class="task-row">
             <span class="task-dot ${dotClass}"></span>
             <span class="task-icon-btn" title="수동완료 취소" onclick="event.stopPropagation();undoManualDone('${escAttr(s.name)}','${escAttr(t.title)}','${t.timestamp||''}')">\u2705</span>
-            <span class="task-name">${esc(t.title)}${manualTag}${editedTag}${pendingTag}</span>
+            <span class="task-name task-name-link" onclick="event.stopPropagation();jumpToTaskCard('${escAttr(t.title)}')">${esc(t.title)}${manualTag}${editedTag}${pendingTag}</span>
             ${metaHtml}
           </div>`;
         } else {
@@ -1824,15 +1954,15 @@ function renderDetail(s) {
       return `<div class="task-row">
         <span class="task-dot ${dotClass}"></span>
         <span class="task-icon-btn" title="수동완료 취소" onclick="event.stopPropagation();undoManualDone('${escAttr(s.name)}','${escAttr(t.title)}','${t.timestamp||''}')">\u2705</span>
-        <span class="task-name">${esc(t.title)}${manualTag}${editedTag}${pendingTag}</span>
+        <span class="task-name task-name-link" onclick="event.stopPropagation();jumpToTaskCard('${escAttr(t.title)}')">${esc(t.title)}${manualTag}${editedTag}${pendingTag}</span>
         ${metaHtml}
         <span class="task-score-val ${scClass}" onclick="event.stopPropagation();showScoreEditModal('${escAttr(s.name)}','${escAttr(t.title)}',${t.score||0},${t.total||100},'${t.timestamp||''}')">${pctDisplay}</span>
       </div>`;
     } else {
       return `<div class="task-row">
         <span class="task-dot ${dotClass}"></span>
-        <span class="task-icon-btn" title="수동완료 처리" onclick="event.stopPropagation();manualDone('${escAttr(s.name)}','${escAttr(t.title)}')">\u274c</span>
-        <span class="task-name">${esc(t.title)}</span>
+        <span class="task-icon-btn" title="수동완료 처리" onclick="event.stopPropagation();manualDone('${escAttr(s.name)}','${escAttr(t.title)}',this)">\u274c</span>
+        <span class="task-name task-name-link" onclick="event.stopPropagation();jumpToTaskCard('${escAttr(t.title)}')">${esc(t.title)}</span>
         ${t.format === '프린트' ? '<span class="task-tag" style="background:var(--bg-2)">🖨 프린트</span>' : (t.link ? `<a class="task-link-btn" href="${esc(t.link)}" target="_blank" onclick="event.stopPropagation();">폼 링크</a>` : '')}
         <span class="task-icon-btn" title="과제 삭제" style="color:var(--danger,#ef4444);margin-left:4px;" onclick="event.stopPropagation();deleteTask('${escAttr(t.title)}','${escAttr(s.school)}','${escAttr(s.grade)}')">🗑</span>
       </div>`;
@@ -1876,6 +2006,40 @@ function toggleCard(name, event) {
   renderStudents();
 }
 
+function jumpToTaskCard(title) {
+  const doHighlight = () => {
+    let el = null;
+    document.querySelectorAll('.wt-group[data-task-label]').forEach(g => {
+      if (g.dataset.taskLabel === title) el = g;
+    });
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.remove('wt-group-highlight');
+    void el.offsetWidth;
+    el.classList.add('wt-group-highlight');
+    el.addEventListener('animationend', () => el.classList.remove('wt-group-highlight'), { once: true });
+  };
+
+  // Find the task's weekNum from taskAssignments
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+  const match = assignments.find(a => a.title === title);
+  const targetWeek = match && match.weekNum ? parseInt(match.weekNum) : null;
+
+  if (targetWeek && targetWeek !== currentWeek) {
+    // Switch to the target week (without resetting expandedStudent)
+    currentWeek = targetWeek;
+    if (demoMode) {
+      const saved = dashboardData.taskAssignments;
+      dashboardData = getDemoData(currentWeek);
+      dashboardData.taskAssignments = saved;
+    }
+    renderAll();
+    setTimeout(doHighlight, 150); // wait for DOM to update
+  } else {
+    doHighlight();
+  }
+}
+
 // ══════════════════════════════════════════
 //  Filters
 // ══════════════════════════════════════════
@@ -1891,6 +2055,9 @@ function getFilteredStudents() {
 
   const gf = document.getElementById('gradeFilter').value;
   if (gf) students = students.filter(s => s.grade === gf);
+
+  const tf = document.getElementById('textbookFilter').value;
+  if (tf) students = students.filter(s => s.textbook === tf);
 
   switch(currentFilter) {
     case 'incomplete':
@@ -1924,7 +2091,16 @@ function getFilteredStudents() {
 }
 
 function setFilter(f) {
+  // Toggle off if clicking the already-active pill
+  if (f !== 'all' && f === currentFilter) f = 'all';
   currentFilter = f;
+  // Clicking 전체 also resets all dropdown filters and search
+  if (f === 'all') {
+    document.getElementById('schoolFilter').value = '';
+    document.getElementById('gradeFilter').value = '';
+    document.getElementById('textbookFilter').value = '';
+    document.getElementById('searchBox').value = '';
+  }
   document.querySelectorAll('.filter-pill').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.filter === f);
   });
@@ -1971,7 +2147,25 @@ async function changeStatus(name, newStatus) {
 // ══════════════════════════════════════════
 //  Actions: Manual Done / Undo
 // ══════════════════════════════════════════
-async function manualDone(studentName, taskTitle) {
+async function manualDone(studentName, taskTitle, btn) {
+  if (btn) { btn.style.opacity = '0.3'; btn.style.pointerEvents = 'none'; }
+  if (demoMode) {
+    const s = (dashboardData.students || []).find(s => s.name === studentName);
+    if (s) {
+      const t = (s.tasks || []).find(t => t.title === taskTitle);
+      if (t) {
+        t.done = true; t.manual = true; t.pct = null; t.score = null; t.total = null;
+        t.timestamp = new Date().toISOString(); t.attempts = 1;
+        t.history = [{ timestamp: t.timestamp, score: null, total: null, pct: null, manual: true }];
+      }
+      s.doneCount = (s.tasks || []).filter(t => t.done).length;
+      const doneScores = (s.tasks || []).filter(t => t.done && t.pct !== null);
+      s.avgPct = doneScores.length > 0 ? Math.round(doneScores.reduce((a, t) => a + t.pct, 0) / doneScores.length) : 0;
+    }
+    renderAll();
+    showToast(`${studentName} - ${taskTitle}: 수동 완료 (데모)`);
+    return;
+  }
   const result = await postAction({ action: '수동완료', studentName, taskTitle });
   if (result && result.success) {
     showToast(`${studentName} - ${taskTitle}: 수동 완료`);
@@ -1981,10 +2175,38 @@ async function manualDone(studentName, taskTitle) {
 
 async function deleteTask(title, school, grade) {
   if (!confirm(`"${title}" 과제를 배정 목록에서 삭제하시겠습니까?\n(이미 제출된 기록은 유지됩니다)`)) return;
-  const result = await postAction({ action: '과제삭제', title, school, grade });
+
+  if (demoMode) {
+    const idx = (dashboardData.taskAssignments || []).findIndex(a => a.title === title);
+    if (idx !== -1) {
+      dashboardData.taskAssignments.splice(idx, 1);
+      weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+      const saved = [...dashboardData.taskAssignments];
+      dashboardData = getDemoData(currentWeek);
+      dashboardData.taskAssignments = saved;
+      renderAll();
+      showToast(`"${title}" 과제 삭제 완료 (데모)`);
+    } else {
+      showToast('과제를 찾을 수 없습니다.');
+    }
+    return;
+  }
+
+  // Look up actual assignment for correct school/grade/weekNum
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+  const a = assignments.find(a => a.title === title);
+  const result = await postAction({
+    action: '과제삭제', title,
+    school: a ? (a.school || '') : school,
+    grade: a ? (a.grade || '') : grade,
+    students: a ? (a.students || '') : '',
+    weekNum: a ? (a.weekNum || '') : ''
+  });
   if (result && result.success) {
     showToast(`"${title}" 과제 삭제 완료`);
-    setTimeout(fetchData, 1000);
+    await fetchData();
+  } else {
+    showToast(result?.error || '과제 삭제에 실패했습니다.');
   }
 }
 
@@ -1997,8 +2219,14 @@ function showTaskMgmtModal(tab, preWeekNum) {
   const allGrades = dashboardData ? (dashboardData.grades || []) : ['1','2','3'];
   const container = document.getElementById('modalContainer');
 
-  const schoolOptions  = schools.map(s => `<option value="${escAttr(s)}">${s}</option>`).join('');
-  const gradeOptions   = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+  const schoolOptions    = schools.map(s => `<option value="${escAttr(s)}">${s}</option>`).join('');
+  const gradeOptions     = allGrades.map(g => `<option value="${escAttr(String(g))}">${/^\d+$/.test(g)?`${g}학년`:g}</option>`).join('');
+  const allTextbooks = (() => {
+    if (dashboardData && dashboardData.textbooks && dashboardData.textbooks.length) return dashboardData.textbooks;
+    const fromStudents = [...new Set((dashboardData && dashboardData.students || []).map(s => s.textbook).filter(Boolean))].sort();
+    return fromStudents.length ? fromStudents : DEMO_TEXTBOOKS;
+  })();
+  const textbookOptions  = allTextbooks.map(t => `<option value="${escAttr(t)}">${esc(t)}</option>`).join('');
   const schoolCheckboxes = schools.map(s =>
     `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer">
       <input type="checkbox" class="school-cb" value="${escAttr(s)}"> ${s}</label>`
@@ -2023,21 +2251,31 @@ function showTaskMgmtModal(tab, preWeekNum) {
     return `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}${fmtLabel}${wkLabel}`;
   }
 
+  const allChecked = assignments.length > 0 && taskMgmtSelected.size === assignments.length;
+  const listHeader = assignments.length === 0 ? '' : `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0 8px;border-bottom:2px solid var(--border);margin-bottom:2px">
+      <input type="checkbox" ${allChecked ? 'checked' : ''} onchange="toggleAllTaskCheck(${assignments.length})" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+      <span style="flex:1;font-size:12px;color:var(--text-3)">전체 선택</span>
+      ${taskMgmtSelected.size > 0 ? `<button onclick="deleteSelectedTasks()" style="background:var(--danger,#ef4444);color:#fff;border:none;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;font-weight:600">선택 삭제 (${taskMgmtSelected.size}개)</button>` : ''}
+    </div>`;
   const listRows = assignments.length === 0
     ? '<p style="color:var(--text-3);text-align:center;padding:16px 0">등록된 과제가 없습니다</p>'
-    : assignments.map((a, i) => `
+    : listHeader + assignments.map((a, i) => `
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <input type="checkbox" ${taskMgmtSelected.has(i) ? 'checked' : ''} onchange="toggleTaskCheck(${i})" style="width:15px;height:15px;cursor:pointer;flex-shrink:0;accent-color:var(--accent)">
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(a.title)}">${esc(a.title)}</div>
           <div style="font-size:11px;color:var(--text-3)">${assignLabel(a)}${a.items ? ' · <span style="color:var(--text-2)">' + esc(a.items) + '</span>' : ''}</div>
         </div>
+        <button class="task-icon-btn" title="수정" style="font-size:16px;flex-shrink:0"
+          onclick="editTaskFromMgmt(${i})">✏️</button>
         <button class="task-icon-btn" title="삭제" style="color:var(--danger,#ef4444);font-size:16px;flex-shrink:0"
           onclick="deleteTaskFromMgmt(${i})">🗑</button>
       </div>`).join('');
 
   container.innerHTML = `
     <div class="modal-overlay" onclick="closeModal(event)">
-      <div class="modal" onclick="event.stopPropagation()" style="max-width:500px">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:680px">
         <h3>📋 과제 관리</h3>
 
         <!-- 탭 -->
@@ -2116,8 +2354,22 @@ function showTaskMgmtModal(tab, preWeekNum) {
 
           <!-- 교과서 -->
           <div id="ta-textbook-fields" style="display:none">
-            <label>교과서명</label>
-            <input id="ta-textbook" type="text" placeholder="예: 공통영어1 천재조">
+            <label>교과서명 <span style="color:var(--fail)">*</span></label>
+            <select id="ta-textbook" style="width:100%;margin-bottom:8px">
+              <option value="">-- 교과서 선택 --</option>${textbookOptions}
+            </select>
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px">
+              <div>
+                <label>주차 <span style="color:var(--fail)">*</span> <span style="font-size:11px;color:var(--text-3)">(캘린더에 표시)</span></label>
+                <input id="ta-textbook-weeknum" type="number" min="1" max="52" placeholder="예: 1" value="${preWeekNum || ''}" style="width:80px;display:block">
+              </div>
+              <div>
+                <label>날짜 <span style="font-size:11px;color:var(--text-3)">(선택)</span></label>
+                <input id="ta-textbook-date" type="date" style="width:160px;display:block">
+              </div>
+            </div>
+            <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
+            <input id="ta-textbook-items" type="text" placeholder="예: 내용일치, 빈칸추론, 어법" style="margin-bottom:8px">
           </div>
 
           <!-- 개별학생 -->
@@ -2149,6 +2401,7 @@ function showTaskMgmtModal(tab, preWeekNum) {
 }
 
 function switchTaskTab(tab) {
+  if (tab !== 'list') taskMgmtSelected.clear();
   showTaskMgmtModal(tab);
 }
 
@@ -2176,6 +2429,54 @@ function selectSchoolsByGrade(grade) {
   });
 }
 
+function toggleTaskCheck(i) {
+  if (taskMgmtSelected.has(i)) taskMgmtSelected.delete(i);
+  else taskMgmtSelected.add(i);
+  showTaskMgmtModal('list');
+}
+
+function toggleAllTaskCheck(total) {
+  if (taskMgmtSelected.size === total) taskMgmtSelected.clear();
+  else { taskMgmtSelected.clear(); for (let i = 0; i < total; i++) taskMgmtSelected.add(i); }
+  showTaskMgmtModal('list');
+}
+
+async function deleteSelectedTasks() {
+  if (taskMgmtSelected.size === 0) return;
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+  const indices = [...taskMgmtSelected].sort((a, b) => b - a); // descending so splice doesn't shift
+  if (!confirm(`선택한 ${indices.length}개 과제를 삭제하시겠습니까?`)) return;
+
+  if (demoMode) {
+    for (const i of indices) dashboardData.taskAssignments.splice(i, 1);
+    weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+    const savedAssignments = [...dashboardData.taskAssignments];
+    dashboardData = getDemoData(currentWeek);
+    dashboardData.taskAssignments = savedAssignments;
+    taskMgmtSelected.clear();
+    document.getElementById('modalContainer').innerHTML = '';
+    renderAll();
+    showToast(`${indices.length}개 과제 삭제 완료 (데모)`);
+    return;
+  }
+
+  let successCount = 0;
+  for (const i of indices) {
+    const a = assignments[i];
+    if (!a) continue;
+    const result = await postAction({
+      action: '과제삭제', title: a.title,
+      school: a.school || '', grade: a.grade || '',
+      students: a.students || '', weekNum: a.weekNum || ''
+    });
+    if (result && result.success) successCount++;
+  }
+  taskMgmtSelected.clear();
+  document.getElementById('modalContainer').innerHTML = '';
+  showToast(`${successCount}개 과제 삭제 완료`);
+  await fetchData();
+}
+
 async function deleteTaskFromMgmt(idx) {
   const assignments = (dashboardData && dashboardData.taskAssignments) || [];
   const a = assignments[idx];
@@ -2186,6 +2487,9 @@ async function deleteTaskFromMgmt(idx) {
   if (demoMode) {
     dashboardData.taskAssignments.splice(idx, 1);
     weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+    const savedAssignments = [...dashboardData.taskAssignments];
+    dashboardData = getDemoData(currentWeek);
+    dashboardData.taskAssignments = savedAssignments;
     document.getElementById('modalContainer').innerHTML = '';
     renderAll();
     showToast(`"${a.title}" 삭제 완료 (데모)`);
@@ -2201,7 +2505,110 @@ async function deleteTaskFromMgmt(idx) {
   if (result && result.success) {
     showToast(`"${a.title}" 삭제 완료`);
     document.getElementById('modalContainer').innerHTML = '';
-    fetchData();
+    await fetchData();
+  }
+}
+
+function editTaskFromMgmt(idx) {
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+  const a = assignments[idx];
+  if (!a) return;
+  const container = document.getElementById('modalContainer');
+  const targetLabel = a.students
+    ? `👤 ${a.students}`
+    : a.school
+      ? `🏫 ${a.school}${a.grade ? ' ' + a.grade + '학년' : ''}`
+      : '🌐 전체';
+  container.innerHTML = `
+    <div class="modal-overlay" onclick="closeModal(event)">
+      <div class="modal" onclick="event.stopPropagation()" style="max-width:680px">
+        <h3>✏️ 과제 수정</h3>
+        <div style="font-size:12px;color:var(--text-3);margin-bottom:14px">${targetLabel} · ${a.weekNum ? a.weekNum + '주차' : '주차미정'}</div>
+
+        <label>과제 제목 <span style="color:var(--fail)">*</span></label>
+        <input id="te-title" type="text" value="${escAttr(a.title || '')}">
+
+        <label>형태</label>
+        <div class="format-radios" style="gap:16px;margin-bottom:8px">
+          <label><input type="radio" name="te-format" value="링크" ${a.format !== '프린트' ? 'checked' : ''} onchange="onEditFormatChange(this.value)"> 🔗 링크</label>
+          <label><input type="radio" name="te-format" value="프린트" ${a.format === '프린트' ? 'checked' : ''} onchange="onEditFormatChange(this.value)"> 🖨 프린트</label>
+        </div>
+
+        <div id="te-link-field" style="display:${a.format === '프린트' ? 'none' : ''}">
+          <label>구글폼 링크</label>
+          <input id="te-link" type="url" value="${escAttr(a.link || '')}" placeholder="https://forms.gle/...">
+        </div>
+
+        <label>주차</label>
+        <input id="te-weeknum" type="number" min="1" max="52" value="${a.weekNum || ''}" style="width:80px;display:block;margin-bottom:8px">
+
+        <label>문제 유형 <span style="font-size:11px;color:var(--text-3)">(쉼표 구분, 선택)</span></label>
+        <input id="te-items" type="text" value="${escAttr(Array.isArray(a.items) ? a.items.join(', ') : (a.items || ''))}">
+
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="showTaskMgmtModal('list')">취소</button>
+          <button class="btn-confirm" onclick="submitTaskEdit(${idx})">저장</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function onEditFormatChange(fmt) {
+  const el = document.getElementById('te-link-field');
+  if (el) el.style.display = fmt === '프린트' ? 'none' : '';
+}
+
+async function submitTaskEdit(idx) {
+  const assignments = (dashboardData && dashboardData.taskAssignments) || [];
+  const orig = assignments[idx];
+  if (!orig) return;
+
+  const newTitle  = (document.getElementById('te-title')?.value || '').trim();
+  const newFormat = document.querySelector('input[name="te-format"]:checked')?.value || '링크';
+  const newLink   = newFormat !== '프린트' ? (document.getElementById('te-link')?.value || '').trim() : '';
+  const newWeekNumRaw = document.getElementById('te-weeknum')?.value;
+  const newWeekNum = newWeekNumRaw ? parseInt(newWeekNumRaw) : null;
+  const newItemsRaw = (document.getElementById('te-items')?.value || '').trim();
+  const newItems = newItemsRaw ? newItemsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  if (!newTitle) { showToast('과제 제목을 입력하세요.'); return; }
+
+  if (demoMode) {
+    orig.title  = newTitle;
+    orig.link   = newLink;
+    orig.format = newFormat;
+    orig.weekNum = newWeekNum;
+    orig.items  = newItems.join(','); // taskAssignments는 문자열로 유지 (computeWeeklySchoolTasks가 split 처리)
+    weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+    document.getElementById('modalContainer').innerHTML = '';
+    renderAll();
+    showToast('과제가 수정되었습니다. (데모)');
+    return;
+  }
+
+  const saveBtn = document.querySelector('#modalContainer .btn-confirm');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '처리 중...'; }
+
+  const result = await postAction({
+    action: '과제수정',
+    originalTitle:    orig.title,
+    originalSchool:   orig.school   || '',
+    originalGrade:    orig.grade    || '',
+    originalWeekNum:  orig.weekNum  || '',
+    originalStudents: orig.students || '',
+    title:   newTitle,
+    link:    newLink,
+    format:  newFormat,
+    weekNum: newWeekNum || '',
+    items:   newItems.join(','),
+  });
+  if (result && result.success) {
+    document.getElementById('modalContainer').innerHTML = '';
+    await fetchData();
+    showToast('과제가 수정되었습니다.');
+  } else {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '저장'; }
+    showToast(result?.error || '수정에 실패했습니다.');
   }
 }
 
@@ -2229,17 +2636,18 @@ async function submitTaskAdd() {
     date    = document.getElementById('ta-date').value;
   } else if (type === 'textbook') {
     textbook = document.getElementById('ta-textbook').value.trim();
-    if (!textbook) { alert('교과서명을 입력해주세요.'); return; }
+    if (!textbook) { alert('교과서를 선택해주세요.'); return; }
+    weekNum = document.getElementById('ta-textbook-weeknum').value.trim();
+    if (!weekNum) { alert('주차를 입력해주세요.'); return; }
+    date  = document.getElementById('ta-textbook-date').value;
+    items = document.getElementById('ta-textbook-items').value.trim();
   } else if (type === 'students') {
     students = document.getElementById('ta-students').value.trim();
     if (!students) { alert('대상 학생을 입력해주세요.'); return; }
   }
 
-  document.getElementById('modalContainer').innerHTML = ''; // 등록 즉시 모달 닫기
-
   if (demoMode) {
     const wn = parseInt(weekNum, 10) || currentWeek;
-    const allSchools = getAvailableSchools();
     const schoolStr = (type === 'schools' || type === 'all')
       ? (schools || '')
       : (school ? school + (grade ? ',' + grade : '') : '');
@@ -2249,16 +2657,25 @@ async function submitTaskAdd() {
       format, weekNum: wn, items, date
     });
     weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+    document.getElementById('modalContainer').innerHTML = '';
     renderAll();
     showToast(`"${title}" 등록 완료 (데모)`);
     return;
   }
 
+  // 버튼 loading 상태
+  const submitBtn = document.querySelector('#tm-pane-add .btn-confirm');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '처리 중...'; }
+
   const result = await postAction({ action: '과제등록', title, link, format, assignType: type,
     school, grade, textbook, students, weekNum, schools, items, date });
   if (result && result.success) {
+    document.getElementById('modalContainer').innerHTML = '';
     showToast(`"${title}" 등록 완료`);
-    fetchData();
+    await fetchData();
+  } else {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '등록'; }
+    showToast(result?.error || '등록에 실패했습니다.');
   }
 }
 
@@ -2357,6 +2774,7 @@ async function submitNewPeriod() {
 function closeModal(event) {
   if (event.target.classList.contains('modal-overlay')) {
     document.getElementById('modalContainer').innerHTML = '';
+    taskMgmtSelected.clear();
   }
 }
 

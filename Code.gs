@@ -102,6 +102,12 @@ function doPost(e) {
       case '과제등록':
         result = handleTaskAdd(params);
         break;
+      case '할일초기화':
+        result = handleTaskReset();
+        break;
+      case '과제수정':
+        result = handleTaskUpdate(params);
+        break;
       default:
         result = { error: '유효하지 않은 액션: ' + action };
     }
@@ -135,9 +141,9 @@ function handleManualDone(params) {
     new Date(),         // A: 타임스탬프
     studentName,        // B: 이름
     taskTitle,          // C: 퀴즈제목
-    100,                // D: 점수
-    100,                // E: 만점
-    100,                // F: 정답률
+    '',                 // D: 점수 (수동완료는 점수 없음)
+    '',                 // E: 만점
+    '',                 // F: 정답률
     periodName,         // G: 기간명
     '수동'              // H: 수정여부
   ]);
@@ -812,6 +818,9 @@ function getDashboardData(requestedPeriod) {
     activePeriod: activePeriod,
     schools: Object.keys(schoolsSet).sort(),
     grades: Object.keys(gradesSet).sort(),
+    textbooks: Object.keys(TEXTBOOK_MAP).reduce(function(acc, k) {
+      var v = TEXTBOOK_MAP[k]; if (v && acc.indexOf(v) === -1) acc.push(v); return acc;
+    }, []).sort(),
     taskAssignments: (function() {
       var rows = [];
       // (1) 할일배정 시트
@@ -1617,7 +1626,6 @@ function handleTaskDelete(params) {
     if (tWeekNum  && rowWeekNum  !== tWeekNum)   continue;
     sheet.deleteRow(i + 1);
     deleted++;
-    if (hasFilter) break; // 특정 배정만 삭제
   }
   if (deleted === 0) return { error: '해당 과제를 찾을 수 없습니다: ' + tTitle };
   return { success: true, action: '과제삭제', title: tTitle, deleted: deleted };
@@ -1699,6 +1707,67 @@ function handleWeeklyTaskList() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tasks = getWeeklyTasksData(ss);
   return { success: true, action: '주간과제조회', weeklyTasks: tasks };
+}
+
+/** 과제 수정 핸들러 */
+function handleTaskUpdate(params) {
+  var origTitle    = (params.originalTitle    || '').trim();
+  var origSchool   = (params.originalSchool   || '').trim();
+  var origGrade    = String(params.originalGrade || '').trim().replace(/[^0-9]/g, '');
+  var origWeekNum  = params.originalWeekNum ? parseInt(params.originalWeekNum, 10) : null;
+  var origStudents = (params.originalStudents || '').trim();
+
+  var newTitle   = (params.title   || origTitle).trim();
+  var newLink    = (params.link    || '').trim();
+  var newFormat  = (params.format  || '링크').trim();
+  var newWeekNum = params.weekNum ? String(parseInt(params.weekNum, 10)) : '';
+  var newItems   = (params.items   || '').trim();
+
+  if (!origTitle) return { error: 'originalTitle이 필요합니다.' };
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_TASKS);
+  if (!sheet) return { error: '할일배정 시트를 찾을 수 없습니다.' };
+
+  var data = sheet.getDataRange().getValues();
+  var updated = 0;
+  for (var i = 1; i < data.length; i++) {
+    var rowTitle    = String(data[i][2] || '').trim();
+    var rowSchool   = String(data[i][0] || '').trim();
+    var rowGrade    = String(data[i][1] || '').trim().replace(/[^0-9]/g, '');
+    var rowStudents = String(data[i][5] || '').trim();
+    var rowWeekNum  = data[i][7] ? parseInt(String(data[i][7]), 10) : null;
+    if (rowTitle !== origTitle) continue;
+    if (origSchool   && rowSchool   !== origSchool)   continue;
+    if (origGrade    && rowGrade    !== origGrade)     continue;
+    if (origStudents && rowStudents !== origStudents)  continue;
+    if (origWeekNum  && rowWeekNum  !== origWeekNum)   continue;
+    sheet.getRange(i + 1, 3).setValue(newTitle);
+    sheet.getRange(i + 1, 4).setValue(newLink);
+    sheet.getRange(i + 1, 7).setValue(newFormat);
+    sheet.getRange(i + 1, 8).setValue(newWeekNum);
+    sheet.getRange(i + 1, 9).setValue(newItems);
+    updated++;
+  }
+  if (updated === 0) return { error: '해당 과제를 찾을 수 없습니다: ' + origTitle };
+  return { success: true, action: '과제수정', title: newTitle, updated: updated };
+}
+
+/** 할일배정 + 주간과제 시트 전체 데이터 초기화 (헤더 유지) */
+function handleTaskReset() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var tasksSheet = ss.getSheetByName(SHEET_TASKS);
+  if (tasksSheet && tasksSheet.getLastRow() > 1) {
+    tasksSheet.deleteRows(2, tasksSheet.getLastRow() - 1);
+  }
+
+  var weeklySheet = ss.getSheetByName(SHEET_WEEKLY);
+  if (weeklySheet && weeklySheet.getLastRow() > 1) {
+    weeklySheet.deleteRows(2, weeklySheet.getLastRow() - 1);
+  }
+
+  return { success: true, action: '할일초기화', message: '할일배정 및 주간과제 데이터가 초기화되었습니다.' };
 }
 
 /** JSON 응답 생성 유틸리티 */
