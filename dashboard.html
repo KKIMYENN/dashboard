@@ -2435,10 +2435,7 @@ function showTaskMgmtModal(tab, preWeekNum) {
       </div>
     </div>`;
 
-  if (preWeekNum && tab === 'add') {
-    const schoolsRadio = document.querySelector('input[name="ta-type"][value="schools"]');
-    if (schoolsRadio) { schoolsRadio.checked = true; onTaskTypeChange('schools'); }
-  }
+  // 모든 타입에 주차 필드가 있으므로 강제 타입 전환 없이 기본(학교+학년) 유지
 }
 
 function switchTaskTab(tab) {
@@ -2710,6 +2707,9 @@ async function submitTaskAdd() {
       format, weekNum: wn, items, date
     });
     weeklySchoolTasks = computeWeeklySchoolTasks(dashboardData.taskAssignments);
+    const savedAssignments = [...dashboardData.taskAssignments];
+    dashboardData = getDemoData(currentWeek);
+    dashboardData.taskAssignments = savedAssignments;
     document.getElementById('modalContainer').innerHTML = '';
     renderAll();
     showToast(`"${title}" 등록 완료 (데모)`);
